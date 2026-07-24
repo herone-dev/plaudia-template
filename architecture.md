@@ -40,8 +40,8 @@
                               │
                               ▼
                      ┌──────────────┐
-                     │  DeepSeek    │
-                     │  (via OR)    │
+                     │  gpt-4o-mini │
+                     │  (via OpenAI)│
                      └──────────────┘
 ```
 
@@ -102,7 +102,9 @@ Frontend → <CR>html</CR>\n\nInstruction : {msg}
 
 ## Endpoints API
 
-### Backend Hermes (écritures uniquement — ~20 endpoints)
+### Backend Hermes (écritures + lectures proxy — ~45 endpoints)
+
+**Note :** Depuis l'implémentation du proxy Lovable (`callHermes` server function), tous les appels frontend passent par le backend — y compris les lectures. Les GET endpoints sont donc des **proxy triviaux** vers Supabase (pas de logique métier).
 
 ```
 POST   /v1/chat/completions              → RAG Chat + édition CR
@@ -142,11 +144,8 @@ Les lectures suivantes vont directement de Supabase au frontend :
 - `SELECT * FROM enterprise_counts` (compteurs, vue matérialisée)
 - `SELECT * FROM glossary` (corrections ortho)
 
-## Endpoints supprimés (anciennement dans le backend)
+## Endpoints de lecture — proxy backend (ré-ajoutés 20/07/2026)
 
-Ces endpoints wrappaient juste Supabase et ont été retirés pour le CQRS :
-- `GET /v1/crs`, `GET /v1/crs/{id}`, `GET /v1/crs/{id}/versions`
-- `GET /v1/enterprises`, `GET /v1/enterprises-with-projects`, `GET /v1/enterprises/{id}/projects`
-- `GET /v1/chat/sessions`, `GET /v1/chat/sessions/{id}`, `GET /v1/chat/sessions/{id}/messages`
-- `GET /v1/rag/duration-stats`
-- `GET /v1/enterprises/with-counts`, `GET /v1/crs/{id}/current-version`
+Ces endpoints étaient initialement supprimés lors de la migration CQRS, mais ont été **ré-ajoutés** comme proxy vers Supabase car le frontend Lovable utilise un proxy serveur (`callHermes`) qui ne peut pas appeler Supabase directement.
+
+Tous les GET endpoints listés ci-dessus dans le backend sont des proxy triviaux (pas de logique métier).
