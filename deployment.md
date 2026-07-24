@@ -190,6 +190,53 @@ curl -H "Authorization: Bearer <jwt>" https://plaudia-api.votre-domaine.app/v1/a
 # → {"user_id":"...", "email":"...", "role":"..."}
 ```
 
+## 9. Mise à jour automatique (weekly)
+
+Un cron **plaudia-auto-update** vérifie chaque dimanche à 3h si une nouvelle version
+du template est disponible sur GitHub. Si oui, il met à jour :
+
+- `rag_backend/main.py`, `auth.py`, `chart_renderer.py`, `google_integration.py`
+- `scripts/` (watchdog, keepalive, tunnel watchdog, refresh counts)
+- `skills/` (orchestrator, pipeline, cr-backend)
+
+**Ce qui NE change PAS :** les credentials (`.env`), la config tunnel (`cloudflared/`),
+les tokens Plaud/Google, les utilisateurs Supabase, les données.
+
+**Ce qui reste à faire manuellement après une mise à jour :**
+- Si le schéma SQL a changé : exécuter les nouvelles migrations dans Supabase
+- Si l'endpoint API a changé : mettre à jour le frontend Lovable
+
+## 10. Maintenance autonome du backend Hermes
+
+Le backend Hermes (sur le VPS) est capable de **maintenir et corriger les bugs
+de l'app Plaudia en autonomie**. Voici comment :
+
+### Diagnostic automatique
+
+Quand un problème est détecté (cron échoué, endpoint 404, watchdog silencieux),
+le prochain Hermes qui arrive sur ce VPS doit :
+
+1. **Lire les skills Plaudia** — `skill_view(name='plaudia-orchestrator')` charge
+   toute l'architecture, les dépendances, les crons, les troubleshooting
+2. **Vérifier les logs** — `hermes cron list` → `cronjob(action='run', job_id='...')`
+   pour exécuter un cron en test
+3. **Tester le backend** — `curl localhost:8000/healthz` puis `openapi.json` pour
+   vérifier les routes
+4. **Vérifier Supabase** — `mcp_supabase_get_advisors()`, `mcp_supabase_execute_sql()`
+5. **Appliquer les correctifs** — modifier `main.py`, `auth.py`, etc. directement
+   dans `/opt/data/projects/plaudia/rag_backend/`
+6. **Attendre le keepalive** — le cron remet le backend en service sous 60s
+
+### Règles de maintenance
+
+- **Ne JAMAIS toucher** aux credentials (`.env`, `mcp-tokens/`, `google_token.json`)
+- **Toujours tester d'abord localement** avant de supposer un problème de tunnel
+- **Toujours suivre la chaîne upstream** : watchdog → DB → trigger → CR (pas l'inverse)
+- **Les skills sont la source de vérité** — si un skill est obsolète, le patcher avec
+  `skill_manage(action='patch')`
+- **Commit les correctifs** dans le template GitHub APRÈS les avoir appliqués
+- **Documenter les bugs** dans `docs/debug-guide.md` du template quand un nouveau est découvert
+
 ## Architecture CQRS
 
 ```
