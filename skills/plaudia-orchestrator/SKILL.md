@@ -12,6 +12,32 @@ Tu viens d'arriver sur un VPS avec Hermes tout neuf. Tu dois :
 - Recréer les crons (keepalive, watchdog, pipeline)
 - Vérifier que tout tourne
 - Diagnostiquer un problème
+- **Maintenir et corriger les bugs de l'app Plaudia en autonomie**
+
+## Diagnostic automatique (maintenance autonome)
+
+Quand un problème est détecté (cron échoué, endpoint 404, watchdog silencieux) :
+
+1. **Lire cette skill** — `skill_view(name='plaudia-orchestrator')` charge toute l'architecture
+2. **Charger les skills associées** — `skill_view(name='plaudia-recording-pipeline')` pour le pipeline,
+   `skill_view(name='plaudia-cr-backend')` pour le backend
+3. **Vérifier les logs** — `hermes cron list` → `cronjob(action='run', job_id='...')`
+4. **Tester le backend** — `curl localhost:8000/healthz` puis `openapi.json` (45+ routes attendues)
+5. **Vérifier Supabase** — `mcp_supabase_get_advisors()`, `mcp_supabase_execute_sql()`
+6. **Appliquer les correctifs** — modifier `main.py`, `auth.py`, directement dans
+   `/opt/data/projects/plaudia/rag_backend/`
+7. **Attendre le keepalive** — le cron redémarre le backend sous 60s
+8. **Commit les correctifs dans le template GitHub** — `git -C /opt/data/projects/plaudia/docs/template add -A && git commit && git push`
+9. **Documenter les bugs** dans `docs/debug-guide.md` du template
+
+### Règles de maintenance
+
+- **Ne JAMAIS toucher** aux credentials (`.env`, `mcp-tokens/`, `google_token.json`)
+- **Toujours tester d'abord localement** avant de supposer un problème de tunnel
+- **Toujours suivre la chaîne upstream** : watchdog → DB → trigger → CR (pas l'inverse)
+- **Les skills sont la source de vérité** — si obsolète, patcher avec `skill_manage(action='patch')`
+- **Le template GitHub est la source de vérité du déploiement** — tout correctif backend doit y être pushé
+- **Le cron `plaudia-auto-update`** (dimanche 3h) propage les mises à jour aux autres VPS automatiquement
 
 ## Dépendances
 
@@ -264,70 +290,53 @@ Voir `references/cloudflare-tunnel-setup.md` pour la configuration complète du 
 
 Chaque projet Lovable a son URL fixe, son Supabase fixe, son backend fixe. Zéro complexité d'auth croisée. Le template de déploiement (`references/deployment-github.md`) guide le setup.
 
-## PITFALLS DÉPLOIEMENT — Bloqueurs pour un nouvel environnement
+## État du template de déploiement (24/07/2026)
 
-### P0 — `main.py` hardcode un `owner_id` spécifique à Martin
+Le template sur `herone-dev/plaudia-template` est **à jour** et contient :
 
-**Où :** `rag_backend/main.py` lignes 689, 708, 719 — l'UUID `79d6876b-bc72-424b-8c23-8c485eaa1b57` (Martin) est écrit en dur dans `load_style_guide()` et `learn_from_edit()`.
+| Fichier | Statut |
+|---------|--------|
+| `rag_backend/main.py` | ✅ Plus de hardcode — `owner_id` dynamique via `get_service_owner_id()` |
+| `rag_backend/auth.py` | ✅ JWT Supabase Auth |
+| `rag_backend/chart_renderer.py` | ✅ SVG charts (svgwrite) |
+| `rag_backend/google_integration.py` | ✅ Export Docs + Gmail |
+| `scripts/` | ✅ 4 scripts (watchdog, keepalive, tunnel watchdog, refresh counts, auto-update) |
+| `skills/` | ✅ 3 skills Hermes |
+| `supabase-schema.sql` | ✅ DDL + triggers + RPC + RLS + `is_system` flag |
+| `supabase/migrations/002_multi_user_rls.sql` | ✅ RLS policies + shares + triggers |
+| `docs/deployment-checklist.md` | ✅ 35 étapes |
+| `docs/debug-guide.md` | ✅ 9 bugs documentés |
+| `docs/frontend-login-prompt.md` | ✅ Prompts Lovable pour auth JWT |
+| `env.example` | ✅ Placeholders uniquement, plus de secrets |
+| `setup-plaudia.sh` | ✅ Paramétrable, plus de refs spécifiques à Martin |
+| `deployment.md` | ✅ Guide complet avec JWT + proxy + auto-update + maintenance autonome |
 
-**Symptôme sur un nouvel environnement :** Le style guide et l'apprentissage automatique échouent silencieusement (les requêtes Supabase ciblent un owner_id qui n'existe pas).
+### Mise à jour automatique (weekly)
 
-**Fix AVANT déploiement :**
-```python
-# Remplacer les 3 occurrences par get_service_owner_id()
-# ligne 689 : owner_id=eq.{get_service_owner_id()}
-# ligne 708 : "owner_id": get_service_owner_id(),
-# ligne 719 : def load_style_guide(owner_id: str = None):
-#     if owner_id is None: owner_id = get_service_owner_id()
-```
+Un cron **plaudia-auto-update** (`d79673e55e0c`) vérifie chaque dimanche à 3h si une
+nouvelle version du template est disponible sur GitHub. Si oui, il met à jour :
+- Le backend (`rag_backend/main.py`, `auth.py`, etc.)
+- Les scripts cron
+- Les skills Hermes
 
-### P0 — `env.example` contient des secrets de production
+**Ce qui NE change PAS :** credentials (`.env`), config tunnel, tokens, données.
 
-**Où :** `docs/template/env.example` — contient les vraies valeurs de l'environnement Martin :
-- `VITE_PLAUDIA_SHARED_KEY=Vs4fcBFp_...` (clé partagée réelle)
-- `VITE_HERONE_SUPABASE_URL=https://ezqbxfmafvdjtgrrxcxy.supabase.co` (URL Supabase réelle)
-- `PLAUDIA_SERVICE_PASSWORD=Herone2026test` (mot de passe réel)
+### Maintenance autonome
 
-**Risque :** Fuite de credentials si le template est partagé ou forké.
+Le backend Hermes sur le VPS est capable de maintenir et corriger les bugs de
+l'app Plaudia en autonomie. Voir la section "Maintenance autonome" dans `deployment.md`
+du template, ou la section "Diagnostic automatique" ci-dessous.
 
-**Fix :** Remplacer TOUTES les valeurs réelles par des placeholders du type `à_remplacer`, `votre-projet.supabase.co`, `sk-pro-...`, `openssl_rand_-hex_32`.
+### Crons actifs
 
-### P1 — Le template GitHub n'est pas à jour
-
-**Problème :** Le repo `herone-dev/plaudia-template` existe sur GitHub (HTTP 200) mais les fichiers locaux dans `/opt/data/projects/plaudia/docs/template/` n'ont **jamais été pushés**. Le repo est vide ou contient une version antérieure.
-
-**En conséquence, la commande `git clone https://github.com/herone-dev/plaudia-template.git` ne récupère pas les bons fichiers.** Avant de déployer sur un nouveau client :
-1. Copier les fichiers manquants dans le template :
-   - `rag_backend/` (main.py, auth.py, chart_renderer.py, google_integration.py)
-   - `scripts/` (plaudia_watchdog.py, plaudia_keepalive.sh, plaudia_tunnel_watchdog.sh, plaudia_refresh_enterprise_counts.py)
-   - `skills/` (les 3 dossiers)
-   - `supabase/migrations/002_multi_user_rls.sql`
-2. Créer les docs manquants :
-   - `docs/deployment-checklist.md` (15 étapes)
-   - `docs/debug-guide.md` (9 bugs documentés)
-   - `docs/frontend-login-prompt.md` (prompts Lovable pour auth JWT)
-3. Push sur `herone-dev/plaudia-template`
-
-### P1 — `setup-plaudia.sh` est spécifique à Martin
-
-**Problème :** Le script clone `https://github.com/herone-dev/plaudia-v1-martin.git` — un repo privé qui n'existe pas pour un nouveau client.
-
-**Fix :** Remplacer par `git clone https://github.com/herone-dev/plaudia-template.git` (après avoir pushé le template à jour). Si le client a son propre fork, paramétrer l'URL en variable.
-
-### P1 — RLS policies absentes du schema.sql
-
-**Problème :** `supabase-schema.sql` contient le DDL complet (CREATE TABLE, CREATE INDEX, CREATE FUNCTION) mais **zéro RLS policy**. Un nouveau déploiement a une base ouverte.
-
-**Fix :** Ajouter dans le schema.sql :
-```sql
-ALTER TABLE enterprises ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE recordings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE crs ENABLE ROW LEVEL SECURITY;
--- ... (toutes les tables)
-CREATE POLICY "owner_all" ON enterprises FOR ALL USING (owner_id = auth.uid());
--- ... (policy par table, voir 002_multi_user_rls.sql)
-```
+| Nom | Schedule | Script | Rôle |
+|-----|----------|--------|------|
+| `plaudia-keepalive` | `* * * * *` | `plaudia_keepalive.sh` | Maintient backend + tunnel |
+| `plaudia-watchdog-free` | `*/5 * * * *` | `plaudia_watchdog.py` | Poll Plaud → INSERT recordings |
+| `plaudia-pipeline-principal` | `0 12 * * *` | LLM (skill) | Génération CR |
+| `plaudia-refresh-enterprise-counts` | `*/15 * * * *` | `plaudia_refresh_enterprise_counts.py` | Refresh vue matérialisée |
+| `plaudia-tunnel-watchdog` | `0 6 * * *` | `plaudia_tunnel_watchdog.sh` | Reconstruction auto tunnel |
+| `plaudia-auto-update` | `0 3 * * 0` | `plaudia_auto_update.py` | Vérification hebdo template GitHub |
 
 ## Troubleshooting
 
@@ -446,8 +455,8 @@ REFRESH MATERIALIZED VIEW enterprise_counts;
 
 ### Erreur Supabase
 ```bash
-mcp_supabase_get_advisors(project_id='ezqbxfmafvdjtgrrxcxy', type='security')
-mcp_supabase_get_advisors(project_id='ezqbxfmafvdjtgrrxcxy', type='performance')
+mcp_supabase_get_advisors(project_id='VOTRE_PROJET_ID', type='security')
+mcp_supabase_get_advisors(project_id='VOTRE_PROJET_ID', type='performance')
 ```
 - **Erreur Supabase** : `mcp_supabase_get_advisors(project_id, 'security')` pour voir les policies
 

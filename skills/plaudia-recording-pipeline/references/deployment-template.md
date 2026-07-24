@@ -30,7 +30,7 @@ Le fichier `main.py` contient encore des valeurs en dur qui doivent être passé
 
 | Variable | Ligne | Valeur actuelle |
 |----------|-------|-----------------|
-| `SUPABASE_URL` | 57 | `https://ezqbxfmafvdjtgrrxcxy.supabase.co` |
+|| `SUPABASE_URL` | 57 | `https://VOTRE_PROJET.supabase.co` |
 | `ANON_KEY` | 58 | `eyJhbG...PBj4` (tronqué) |
 | `SERVICE_EMAIL` | 59 | `martin@herone.fr` |
 | `OPUS_MODEL` | 66 | `deepseek/deepseek-v4-flash` |

@@ -131,8 +131,8 @@ interface DiscussionTag {
 
 | Variable | Rôle |
 |---|---|
-| `VITE_HERONE_SUPABASE_URL` | `https://ezqbxfmafvdjtgrrxcxy.supabase.co` |
-| `VITE_HERONE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_mYN0LMWgAg0T45wJZsHjJQ_Dd-_Au-N` |
+|| `VITE_HERONE_SUPABASE_URL` | `https://VOTRE_PROJET.supabase.co` |
+|| `VITE_HERONE_SUPABASE_PUBLISHABLE_KEY` | `VOTRE_CLE_ANON` |
 | `VITE_PLAUDIA_BACKEND_URL` | `https://plaudia-api.herone.app` |
 | `VITE_PLAUDIA_SHARED_KEY` | Clé partagée du backend |
 | `VITE_CF_CLIENT_ID` | Service Token Cloudflare Access |

@@ -13,11 +13,11 @@ Requires:
     - /opt/data/mcp-tokens/plaud.json (Plaud OAuth token)
     - Supabase service key (sbp_...) in the script constants
 """
-import json, urllib.request, sys, time
+import json, os, urllib.request, sys, time
 
-SUPABASE_URL = "https://ezqbxfmafvdjtgrrxcxy.supabase.co"
-SUPABASE_KEY = "sb_publishable_mYN0LMWgAg0T45wJZsHjJQ_Dd-_Au-N"
-SERVICE_KEY = "sbp_1dc29f31b802ecebb16c2249b06e8c1615e275a0"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+SERVICE_KEY = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
 PLAUD_MCP = "https://mcp.plaud.ai/mcp"
 
 with open("/opt/data/mcp-tokens/plaud.json") as f:
@@ -46,7 +46,7 @@ def plaud_call(method, args):
     return None
 
 def supabase_query(sql):
-    url = "https://api.supabase.com/v1/projects/ezqbxfmafvdjtgrrxcxy/database/query"
+    url = f"https://api.supabase.com/v1/projects/{os.environ.get('SUPABASE_PROJECT_ID', '')}/database/query"
     req = urllib.request.Request(url,
         data=json.dumps({"query": sql}).encode(),
         headers={"Authorization": f"Bearer {SERVICE_KEY}",

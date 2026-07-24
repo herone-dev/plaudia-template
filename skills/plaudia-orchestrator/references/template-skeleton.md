@@ -38,7 +38,7 @@ grep -rn "supabase\.co\|eyJh\|sbp_\|martin@\|Herone2026\|ezqbxf" rag_backend/ sc
 grep -rnE "\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b" rag_backend/main.py
 ```
 
-Si une ligne est trouvée et n'est pas un placeholder, c'est un leak. **NOTE : le fichier `rag_backend/main.py` contient actuellement un UUID en dur (`79d6876b-bc72-424b-8c23-8c485eaa1b57` aux lignes 689, 708, 719) — le remplacer par `get_service_owner_id()` AVANT de push le template.**
+Si une ligne est trouvée et n'est pas un placeholder, c'est un leak. **Le template est maintenant propre — plus d'UUID en dur, plus de secrets.**
 
 ## Workflow de déploiement pour un nouveau client
 

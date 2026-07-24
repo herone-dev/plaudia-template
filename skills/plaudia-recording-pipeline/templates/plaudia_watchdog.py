@@ -33,7 +33,7 @@ PLAUD_CLIENT_PATH = "/opt/data/mcp-tokens/plaud.client.json"
 PLAUD_META_PATH = "/opt/data/mcp-tokens/plaud.meta.json"
 PLAUD_MCP_URL = "https://mcp.plaud.ai/mcp"
 
-SUPABASE_PROJECT_ID = "ezqbxfmafvdjtgrrxcxy"
+SUPABASE_PROJECT_ID = os.environ.get("SUPABASE_PROJECT_ID", "")
 SUPABASE_ACCESS_TOKEN = "sbp_..."  # Supabase Management API token (not the anon/service key)
 SUPABASE_QUERY_URL = f"https://api.supabase.com/v1/projects/{SUPABASE_PROJECT_ID}/database/query"
 

@@ -127,7 +127,7 @@ except Exception:
 ### ANON_KEY tronquée dans main.py
 Le fichier `main.py` peut contenir une ANON_KEY placeholder tronquée (`"eyJhbG...PBj4"`) au lieu de la vraie clé. Toujours vérifier avec :
 ```python
-mcp_supabase_get_publishable_keys(project_id="ezqbxfmafvdjtgrrxcxy")
+mcp_supabase_get_publishable_keys(project_id="VOTRE_PROJET_ID")
 ```
 
 ### keepalive conflict

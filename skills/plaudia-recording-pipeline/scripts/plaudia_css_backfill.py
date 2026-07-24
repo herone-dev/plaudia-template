@@ -6,8 +6,8 @@ Exécuté après migration v13 pour backfill CRs existants."""
 import json
 import urllib.request
 
-SUPABASE_ACCESS_TOKEN = "sbp_1dc29f31b802ecebb16c2249b06e8c1615e275a0"
-SUPABASE_QUERY_URL = "https://api.supabase.com/v1/projects/ezqbxfmafvdjtgrrxcxy/database/query"
+SUPABASE_ACCESS_TOKEN = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
+SUPABASE_QUERY_URL = f"https://api.supabase.com/v1/projects/{os.environ.get('SUPABASE_PROJECT_ID', '')}/database/query"
 
 CSS = """<style>
 .cr-document {
