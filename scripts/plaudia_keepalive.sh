@@ -10,7 +10,7 @@ if ! curl -sf http://127.0.0.1:8000/healthz > /dev/null 2>&1; then
     echo "[$(date)] Backend mort — relance..."
     cd /opt/data/projects/plaudia/rag_backend
     source "$ENV_FILE"
-    export SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_EMAIL SUPABASE_SERVICE_PASSWORD OPENAI_API_KEY ANTHROPIC_API_KEY PLAUDIA_SHARED_KEY
+    export SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_EMAIL SUPABASE_SERVICE_PASSWORD OPENAI_API_KEY ANTHROPIC_API_KEY PLAUDIA_SHARED_KEY SUPABASE_PROJECT_ID SUPABASE_ACCESS_TOKEN
     nohup /opt/hermes/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /opt/data/plaudia_backend.log 2>&1 &
     echo $! > /opt/data/plaudia_backend.pid
     echo "[$(date)] Backend relancé"
