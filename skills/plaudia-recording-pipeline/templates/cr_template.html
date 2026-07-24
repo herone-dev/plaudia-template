@@ -1,0 +1,42 @@
+<!--
+Plaudia CR (compte-rendu) template — copy and fill in.
+- cr-logo is always literally "Hérone".
+- cr-meta: date, approx duration, participants detected (use Speaker N labels for
+  unidentified speakers; do not invent names).
+- Organize cr-section blocks by THEME, not strict chronology, unless the recording
+  is a fast-moving multi-topic call where chronology carries the meaning better.
+- cr-table at the end: one row per item, labelled with cr-label-blue (open point /
+  next step) or cr-label-orange (decision made). Keep these short and actionable.
+- Flag uncertain proper nouns/terms inline as "(orthographe non confirmée)" rather
+  than guessing silently.
+-->
+<div class="cr-document">
+  <div class="cr-logo">Hérone</div>
+  <div class="cr-subtitle">{{TITLE}}</div>
+  <hr class="cr-divider">
+  <div class="cr-meta">{{DATE}} — Durée : environ {{DURATION}} — Participants détectés : {{PARTICIPANTS}}</div>
+
+  <div class="cr-section">
+    <h2 class="cr-section-title">{{SECTION_TITLE_1}}</h2>
+    <div class="cr-body">
+      <p>{{PARAGRAPH}}</p>
+      <div class="cr-subsection">
+        <h3>{{SUBSECTION_TITLE}}</h3>
+        <p>{{PARAGRAPH}}</p>
+        <ul>
+          <li>{{BULLET}}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- repeat cr-section blocks per theme -->
+
+  <div class="cr-table">
+    <div class="cr-table-row"><span class="cr-label-orange">Décision</span> {{DECISION_TEXT}}</div>
+    <div class="cr-table-row"><span class="cr-label-blue">Point ouvert</span> {{OPEN_POINT_TEXT}}</div>
+    <div class="cr-table-row"><span class="cr-label-blue">Prochaine étape</span> {{NEXT_STEP_TEXT}}</div>
+  </div>
+
+  <div class="cr-footer">Généré automatiquement par Plaudia — Hérone</div>
+</div>
