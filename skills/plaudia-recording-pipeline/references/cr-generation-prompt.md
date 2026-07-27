@@ -124,6 +124,42 @@ RÈGLES NON NÉGOCIABLES :
 .cr-footer p { margin: 0; }
 ```
 
+## FORMAT A4 — RÈGLES PAGINATION (frontend, 25/07/2026)
+
+Le front affiche les CR dans une iframe qui simule des feuilles A4 (210×297mm, marges 14mm H / 18mm V). Le HTML DOIT inclure :
+
+### Wrapper racine
+```html
+<article class="cr-document" data-format="A4">
+```
+
+### Sauts de page explicites entre sections
+Entre chaque section principale (Objectif, Ordre du jour, Points abordés, Prochaines étapes) :
+```html
+<div class="page-break" style="break-before: page; page-break-before: always;"></div>
+```
+
+### Blocs insécables (avoid-break)
+Sur chaque sous-section, item d'action, tableau, blockquote :
+```html
+<section class="avoid-break" style="break-inside: avoid; page-break-inside: avoid;">…</section>
+```
+
+### Titres jamais orphelins
+```html
+<h2 class="cr-section-title" style="break-after: avoid; page-break-after: avoid;">…</h2>
+```
+
+### PAS de text-align: justify
+Utiliser text-align: left par défaut. Le front gère la typo.
+
+### Longueur cible par page
+~2800 caractères par page. Chaque section principale doit tenir sur 1 page ou insérer un .page-break avant de déborder.
+
+### Format titre recording
+`[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]`
+Exemple : `Veron Diet — Consultation client — Refonte site web et automatisation IA — 24/07/2026`
+
 ## Structure HTML générée
 
 ```html

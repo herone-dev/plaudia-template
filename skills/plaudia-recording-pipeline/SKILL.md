@@ -1,6 +1,21 @@
 ---
 name: plaudia-recording-pipeline
 description: Process Plaud voice recordings into the Plaudia app (project "Hérone") — fetch transcripts via mcp_plaud_*, insert transcript + generate branded CR (compte-rendu) HTML into Supabase (`recordings` + `crs` tables). Also covers the CR edit backend (modifications via chat). Use whenever the user asks to "traiter des enregistrements Plaud pour Plaudia/Hérone", process a batch of recordings into the pipeline, or regenerate a CR for a recording.
+mandatory: true
+---
+
+# ⚠️ RÈGLE ABSOLUE — À LIRE AVANT TOUTE ACTION
+
+Cette skill est **obligatoire** pour toute opération Plaudia.  
+L'agent DOIT charger cette skill AVANT de générer un CR, modifier le pipeline, ou toucher au watchdog.
+
+**NE PAS** :
+- Écrire de script manuel pour générer un CR → utiliser le template dans `references/cr-generation-prompt.md`
+- Inventer un prompt → recopier celui de la référence
+- Créer un cron sans `skills: ["plaudia-recording-pipeline"]`
+
+**Vérifier** : `skill_view(name='plaudia-recording-pipeline')` avant chaque action.
+
 ---
 
 # Plaudia recording pipeline (Plaud → Supabase → CR)
@@ -42,7 +57,7 @@ Direct Supabase calls audit (which frontend components still bypass the backend 
 ## Prerequisites / project state
 
 - **Plaud MCP server** (`plaud-org/plaud-mcp-server`) must be installed and configured under `/opt/data/mcp-tokens/plaud.json` (OAuth token). If not, run `cat /opt/data/mcp-tokens/plaud.client.json` to get the `client_id`, then walk the user through creating a Plaud integration at https://app.plaud.ai/settings → Integrations → New Integration → Hermes. The redirect URI must match the `redirect_uris` in the client JSON.
-- **Watchdog cron** (`plaudia-watchdog-free`, `no_agent=True`, schedule `*/5 * * * *`) must be active on the Hermes instance that has the Plaud MCP tokens. It polls Plaud every 5 minutes for new recordings and inserts them into Supabase. Status: working, runs at `/opt/data/scripts/plaudia_watchdog.py`.
+- **Watchdog cron** (`plaudia-watchdog-free`, `no_agent=True`, schedule `*/5 * * * *`) must be active on the Hermes instance that has the Plaud MCP tokens. It polls Plaud every 5 minutes for new recordings and inserts them into Supabase. **Le script actif est dans `/opt/data/.hermes/scripts/plaudia_watchdog.py`** (c'est celui que le cron exécute). Ne pas confondre avec `/opt/data/scripts/plaudia_watchdog.py` qui est l'ancienne version de référence mais pas celle utilisée par le cron. Les deux versions existent — faire attention à laquelle est modifiée.
 - **Pipeline cron** (`plaudia-pipeline-principal`, LLM-agent, schedule `0 12 * * *`) generates CRs daily at noon. Not a script — a cron job definition with a prompt that each tick the agent runs. Triggered manually via `hermes cron run d4777fc4327a`.
 - **Supabase** project `Herone_vocal_ia` (`VOTRE_PROJET_ID`). Tables: `recordings`, `crs`, `enterprises`, `projects`, `cr_versions`, `rag_chunks`.
 - **Backend FastAPI** at `/opt/data/projects/plaudia/rag_backend/main.py`, port 8000, tunnel `https://plaudia-api.herone.app`. Restarted by keepalive cron every minute. The `main.py` CR edit V3 flow now separates content (`<article>`) from the CSS template — read `references/backend-api-architecture.md` for current contract.
@@ -62,7 +77,7 @@ When the user asks to "process new recordings" or the cron fires:
 
 | File | Path | Purpose |
 |---|---|---|
-| Watchdog script | `/opt/data/scripts/plaudia_watchdog.py` | Polls Plaud API, inserts recordings with enterprise detection |
+| Watchdog script | `/opt/data/.hermes/scripts/plaudia_watchdog.py` (actif, PostgREST+JWT) — `/opt/data/scripts/plaudia_watchdog.py` (copie synchro) | Polls Plaud API, inserts recordings with enterprise detection via PostgREST. Modèle de référence dans `scripts/plaudia_watchdog.py` de cette skill. |
 | Backend FastAPI | `/opt/data/projects/plaudia/rag_backend/main.py` | CRUD, CR generation/edit, RAG chat, enterprises CRUD |
 | Supabase client | `src/integrations/supabase/herone-client.ts` | Dedicated Supabase client for Hérone project |
 | Direct Supabase audit | `references/direct-supabase-calls-audit.md` | Every frontend→Supabase direct call mapped to the API endpoint that should replace it. Consult before migrating any remaining `heroneSupabase` calls. |
@@ -101,6 +116,22 @@ When the user asks to "process new recordings" or the cron fires:
 **"Général" project filter is fragile — prefer `is_system` flag.** The backend auto-creates a project named "Général" for every new enterprise (main.py:1561-1564). The frontend filters it by name (`isGeneral()` in EnterprisesContext.tsx:80, `.neq("name", "Général")` in ProjectsView.tsx:39). If someone renames it, the filter silently breaks and the project appears everywhere. Fix: add a `is_system boolean DEFAULT false` column to `projects`, mark the auto-created project with `is_system=true`, and filter by that column. Both backend and frontend need updating.
 
 **Cron scheduling for a day-spanning active window** (e.g. "7 days/week, active 6h30–01h00, i.e. wraps past midnight and starts mid-hour"): a single 5-field cron expression can't express both "starts at :30 past a specific hour" and "wraps past midnight" cleanly in one rule. Split into two jobs instead: one covering the partial starting hour (`30-59/5 6 * * *`) and one covering the rest of the range, listing the wrapped hour explicitly (`*/5 7-23,0 * * *`).
+
+**Le watchdog n'utilise plus l'API Management Supabase — il utilise PostgREST + JWT.** L'ancienne version utilisait `SUPABASE_ACCESS_TOKEN` (token `sbp_...`) avec l'endpoint `api.supabase.com/v1/projects/{id}/database/query`. Ce token peut être révoqué ou regénéré sans prévenir (ex: regénération des clés API dans le dashboard Supabase). La version actuelle (`/opt/data/.hermes/scripts/plaudia_watchdog.py`) se connecte via le service account (`martin@herone.fr`) pour obtenir un JWT, puis utilise l'API PostgREST (`SUPABASE_URL/rest/v1/...`). **Ne pas recopier l'ancienne approche Management API.**
+
+**La clé anon Supabase peut être regénérée dans le dashboard.** Si le watchdog retourne `Invalid API key` sur l'endpoint auth, c'est que la clé `SUPABASE_ANON_KEY` dans `.env` ne correspond plus à celle du projet. Vérifier en comparant avec Supabase Dashboard → Settings → API → anon key. Le watchdog n'a PAS de fallback hardcodé valide — il prend la clé depuis `os.environ.get("SUPABASE_ANON_KEY")` et échoue si vide. Quand run hors cron (terminal), faire `source /opt/data/.env` avant.
+
+**`hermes cron run` dans un watchdog no_agent timeout à 30s par défaut.** Le watchdog lance `subprocess.run(["hermes", "cron", "run", LLM_JOB_ID], timeout=30)` après avoir inséré des enregistrements. 30s est trop court — `hermes cron run` peut prendre >30s pour démarrer. Solution : soit `subprocess.Popen(...)` (fire-and-forget, pas d'attente), soit `timeout=300`. Si le pipeline ne se déclenche pas, lancer manuellement `cronjob(action='run', job_id=...)`.
+
+**Le pipeline cron DOIT avoir la skill `plaudia-recording-pipeline` chargée dans `skills`.** Sans skills, l'agent ne sait pas quel template HTML utiliser, ni le format A4, ni la convention de nommage. Vérifier avec `cronjob(action='list', job_id='d4777fc4327a')` que `skills` contient bien `["plaudia-recording-pipeline"]`.
+
+**Le watchdog doit être copié à DEUX endroits.** Le cron résout `plaudia_watchdog.py` depuis `/opt/data/scripts/` (pas `~/.hermes/scripts/`). Les deux versions doivent être synchronisées. Faire après chaque modification : `cp /opt/data/.hermes/scripts/plaudia_watchdog.py /opt/data/scripts/plaudia_watchdog.py`.
+
+**Détection entreprise : ne pas se limiter au titre — scanner aussi la transcription.** `detect_enterprise()` vérifie maintenant `enterprise_name.lower() in transcript.lower()` en plus du titre. Les fichiers Plaud ont souvent des noms non identifiants (ex: "24/07/2026") mais la transcription contient le nom de l'entreprise.
+
+**Convention de nommage des enregistrements :** `[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]`. Exemple : `Veron Diet — Consultation client — Refonte site web et automatisation IA — 24/07/2026`. Le trigger DB `trg_update_recording_title` met à jour automatiquement le titre quand `enterprise_id` est setté, mais le format doit être correct.
+
+**Le scheduler Hermes peut se figer sans warning.** Dans une session réelle, les crons n'ont pas déclenché depuis 4 jours (last_run_at figé) alors que le processus `hermes dashboard` tournait normalement. Aucun log d'erreur. Diagnostic : vérifier `hermes cron list` — si tous les `next_run_at` sont dans le passé, le scheduler est bloqué. Solution : redémarrer Hermes ou recréer les crons. Les jobs manuels via `cronjob(action='run')` fonctionnent même quand le scheduler est bloqué.
 
 ## Behind the scenes
 

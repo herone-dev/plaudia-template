@@ -1,64 +1,165 @@
 #!/usr/bin/env python3
 """
-Plaudia watchdog — 0-token free check (reference implementation).
+Plaudia watchdog — récupère les nouveaux fichiers Plaud et les insère en base.
+0-LLM cost (pur script Python, pas d'appel LLM).
 
-Runs as a `no_agent=True` cron job (pure script, no LLM invocation). Calls the
-Plaud MCP HTTP endpoint and the Supabase Management API directly via raw HTTP
-(no hermes agent loop, no token cost), compares the last N Plaud recordings
-against the `recordings` table by plaud_file_id, and:
-  - if nothing new: prints nothing (silent, per no_agent contract — empty
-    stdout = nothing delivered to the user)
-  - if new recordings found: prints a short report AND triggers the real
-    LLM-driven pipeline job via `hermes cron run <job_id>` so the actual
-    transcript+CR generation (which legitimately needs an LLM) only runs
-    when there's real work to do.
+Utilise l'API PostgREST avec JWT du service account (pas de token Management API).
 
-Verified end-to-end in a real session: silent on a clean run, correctly
-flagged an injected fake plaud_file_id as "new", and correctly shelled out
-to `hermes cron run`. Copy this file into ~/.hermes/scripts/ (the cronjob
-tool's `script` param must be a bare filename resolved under that dir, not
-an absolute path) and adapt the constants below before wiring it to a
-`cronjob(action='create', no_agent=True, script='<filename>')` job.
+Routine :
+  1. Liste les fichiers Plaud récents via l'API MCP
+  2. Compare avec recordings.plaud_file_id (via PostgREST)
+  3. Pour chaque nouveau fichier :
+     a. get_file → metadata (created_at, serial_number, start_at, duration)
+     b. get_transcript → segments avec timestamps
+     c. INSERT dans recordings (status='transcribed') via PostgREST
+  4. Déclenche le pipeline LLM (cron) pour générer les CRs
 """
 import json
+import os
 import subprocess
 import sys
 import time
-import urllib.request
 import urllib.parse
+import urllib.request
+from typing import Optional
 
-# --- adapt these per project ---
+# ── Chargement du .env pour les crons (qui n'ont pas les vars d'env) ──
+_env_loaded = False
+for _env_path in ["/opt/data/.env", os.path.expanduser("~/.env")]:
+    if os.path.exists(_env_path):
+        try:
+            with open(_env_path) as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k = _k.strip()
+                        _v = _v.strip().strip("\"'")
+                        if _k and not os.environ.get(_k):
+                            os.environ[_k] = _v
+                            _env_loaded = True
+        except Exception:
+            pass
+
 PLAUD_TOKEN_PATH = "/opt/data/mcp-tokens/plaud.json"
 PLAUD_CLIENT_PATH = "/opt/data/mcp-tokens/plaud.client.json"
 PLAUD_META_PATH = "/opt/data/mcp-tokens/plaud.meta.json"
 PLAUD_MCP_URL = "https://mcp.plaud.ai/mcp"
 
-SUPABASE_PROJECT_ID = os.environ.get("SUPABASE_PROJECT_ID", "")
-SUPABASE_ACCESS_TOKEN = "sbp_..."  # Supabase Management API token (not the anon/service key)
-SUPABASE_QUERY_URL = f"https://api.supabase.com/v1/projects/{SUPABASE_PROJECT_ID}/database/query"
+SUPABASE_URL = "https://ezqbxfmafvdjtgrrxcxy.supabase.co"
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
-# The real LLM pipeline cron job_id (only run when the watchdog finds something new).
-LLM_JOB_ID = "REPLACE_WITH_REAL_JOB_ID"
+OWNER_ID = "79d6876b-bc72-424b-8c23-8c485eaa1b57"
 
+LLM_JOB_ID = "d4777fc4327a"
 N_RECENT = 20
 
+# Cache du JWT service account
+_SERVICE_JWT = None
+_SERVICE_JWT_EXPIRES = 0
 
-def http_post_json(url, headers, body, timeout=20):
-    data = json.dumps(body).encode("utf-8")
-    # Supabase's edge (Cloudflare) blocks the default Python urllib User-Agent
-    # with a 403 / "error code: 1010" — always send an explicit UA.
+
+def http_request(url, headers, body=None, method="POST", timeout=30):
+    """Effectue une requête HTTP et retourne la réponse (str)."""
     headers = {"User-Agent": "curl/8.5.0", **headers}
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    data = json.dumps(body).encode("utf-8") if body else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8")
 
 
+def get_service_jwt():
+    """Obtient un JWT frais via sign-in avec le service account."""
+    global _SERVICE_JWT, _SERVICE_JWT_EXPIRES
+    now = time.time()
+    if _SERVICE_JWT and _SERVICE_JWT_EXPIRES > now + 120:
+        return _SERVICE_JWT
+    body = {
+        "email": "martin@herone.fr",
+        "password": "Herone2026test",
+    }
+    raw = http_request(
+        f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+        {
+            "apikey": SUPABASE_ANON_KEY,
+            "Content-Type": "application/json",
+        },
+        body,
+    )
+    data = json.loads(raw)
+    _SERVICE_JWT = data["access_token"]
+    _SERVICE_JWT_EXPIRES = now + data.get("expires_in", 3600)
+    return _SERVICE_JWT
+
+
+def supabase_select(columns, table, filters=None):
+    """SELECT via PostgREST. Retourne la liste des rows."""
+    jwt = get_service_jwt()
+    url = f"{SUPABASE_URL}/rest/v1/{table}?select={columns}"
+    if filters:
+        url += f"&{filters}"
+    raw = http_request(
+        url,
+        {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {jwt}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    return json.loads(raw)
+
+
+def supabase_insert(table, row_data):
+    """INSERT via PostgREST. Retourne le status code."""
+    jwt = get_service_jwt()
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    raw = http_request(
+        url,
+        {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {jwt}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        },
+        row_data,
+    )
+    return raw
+
+
+def plaud_call(token, method, args):
+    """Appelle une méthode MCP Plaud et retourne le résultat parsé."""
+    body = {
+        "jsonrpc": "2.0", "id": 1,
+        "method": "tools/call",
+        "params": {"name": method, "arguments": args},
+    }
+    raw = http_request(
+        PLAUD_MCP_URL,
+        {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        body,
+    )
+    for line in raw.strip().splitlines():
+        if line.startswith("data:"):
+            data = json.loads(line[5:].strip())
+            result = data.get("result", {})
+            if isinstance(result, dict) and "content" in result:
+                text = result["content"][0]["text"]
+                return json.loads(text)
+            return result
+    return None
+
+
 def load_plaud_token():
+    """Charge ou rafraîchit le token Plaud."""
     with open(PLAUD_TOKEN_PATH) as f:
         tok = json.load(f)
     if tok.get("expires_at", 0) > time.time() + 60:
         return tok["access_token"]
-    # refresh via standard OAuth refresh_token grant
     with open(PLAUD_CLIENT_PATH) as f:
         client = json.load(f)
     with open(PLAUD_META_PATH) as f:
@@ -81,74 +182,181 @@ def load_plaud_token():
     return new_tok["access_token"]
 
 
-def list_recent_plaud_files(token, n=N_RECENT):
-    body = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {"name": "list_files", "arguments": {"page": 1, "page_size": n}},
-    }
-    raw = http_post_json(
-        PLAUD_MCP_URL,
-        {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
-        body,
-    )
-    # Plaud MCP replies to tools/call in SSE framing even for non-streaming
-    # calls: "event: message\ndata: {...}". Take the last data: line.
-    line = raw.strip().splitlines()[-1]
-    if line.startswith("data:"):
-        line = line[len("data:"):].strip()
-    outer = json.loads(line)
-    result = outer["result"]
-    # MCP tool call result: {"content":[{"type":"text","text":"..json.."}], ...}
-    if isinstance(result, dict) and "content" in result:
-        payload = json.loads(result["content"][0]["text"])
-    else:
-        payload = result
-    return payload.get("data", payload) if isinstance(payload, dict) else payload
+def get_existing_file_ids():
+    """Récupère les plaud_file_id déjà présents en base."""
+    rows = supabase_select("plaud_file_id", "recordings", "plaud_file_id=not.is.null")
+    return {r["plaud_file_id"] for r in rows}
 
 
-def get_existing_recording_ids(file_ids):
-    if not file_ids:
-        return set()
-    ids_sql = ",".join(f"'{fid}'" for fid in file_ids)
-    query = f"select plaud_file_id from recordings where plaud_file_id in ({ids_sql});"
-    raw = http_post_json(
-        SUPABASE_QUERY_URL,
-        {"Authorization": f"Bearer {SUPABASE_ACCESS_TOKEN}", "Content-Type": "application/json"},
-        {"query": query},
-    )
-    return {r["plaud_file_id"] for r in json.loads(raw)}
+def parse_transcript_segments(transcript_data):
+    """Extrait les segments timestampés de la transcription Plaud."""
+    segments = []
+    if isinstance(transcript_data, list):
+        for item in transcript_data:
+            if item.get("data_type") == "transaction":
+                raw = json.loads(item.get("data_content", "[]"))
+                for seg in raw:
+                    segments.append({
+                        "speaker": seg.get("speaker", seg.get("original_speaker", "Speaker")),
+                        "original_speaker": seg.get("original_speaker", seg.get("speaker", "")),
+                        "content": seg.get("content", ""),
+                        "start_time": seg.get("start_time", 0),
+                        "end_time": seg.get("end_time", 0),
+                    })
+    return segments
 
 
-def trigger_llm_pipeline():
-    subprocess.run(["hermes", "cron", "run", LLM_JOB_ID], check=False, capture_output=True, timeout=30)
+def format_raw_transcript(segments):
+    """Construit le texte brut : 'Speaker : content'."""
+    lines = []
+    for seg in segments:
+        speaker = seg.get("speaker", "Speaker")
+        content = seg.get("content", "").strip()
+        if content:
+            lines.append(f"{speaker} : {content}")
+    return "\n".join(lines)
 
 
 def main():
     try:
         token = load_plaud_token()
-        files = list_recent_plaud_files(token, N_RECENT)
-        file_ids = [f["id"] for f in files]
-        existing = get_existing_recording_ids(file_ids)
-        new_ids = [fid for fid in file_ids if fid not in existing]
     except Exception as e:
-        print(f"[plaudia-watchdog] Erreur de vérification: {e}")
+        print(f"[plaudia-watchdog] Erreur auth Plaud: {e}")
         return
 
-    if not new_ids:
-        return  # silent — nothing to report, no LLM triggered, 0 tokens spent
+    # Précharge la liste des entreprises et projets pour attribution
+    enterprises = []
+    projects = []
+    try:
+        rows = supabase_select("id,name", "enterprises", "order=name.asc")
+        enterprises = [(r["id"], r["name"]) for r in rows]
+        print(f"[plaudia-watchdog] {len(enterprises)} entreprise(s) chargée(s)")
+        prows = supabase_select("id,enterprise_id,name", "projects", "order=enterprise_id,name.asc")
+        projects = [(r["id"], r["enterprise_id"], r["name"]) for r in prows]
+    except Exception as e:
+        print(f"[plaudia-watchdog] ⚠️ Impossible de charger les entreprises: {e}")
 
-    names_by_id = {f["id"]: f["name"] for f in files}
-    lines = [f"[plaudia-watchdog] {len(new_ids)} nouvel(aux) enregistrement(s) détecté(s), déclenchement du pipeline complet :"]
-    for fid in new_ids:
-        lines.append(f"  - {names_by_id.get(fid, fid)} ({fid})")
-    print("\n".join(lines))
-    trigger_llm_pipeline()
+    def detect_enterprise(title: str, transcript: str = "") -> tuple[Optional[str], Optional[str], list]:
+        """Détecte l'entreprise depuis le titre OU la transcription."""
+        t = title.lower()
+        for eid, ename in enterprises:
+            en = ename.lower()
+            if en in t:  # match dans le titre
+                cand_projects = [pid for pid, peid, _ in projects if peid == eid]
+                return eid, ename, cand_projects
+            if transcript and en in transcript.lower():  # match dans la transcription
+                cand_projects = [pid for pid, peid, _ in projects if peid == eid]
+                return eid, ename, cand_projects
+        return None, None, []
+
+    def detect_project(title: str, cand_ids: list) -> Optional[str]:
+        t = title.lower()
+        for pid, peid, pname in projects:
+            if pid in cand_ids and pname.lower() in t:
+                return pid
+        return None
+
+    try:
+        files = plaud_call(token, "list_files", {"page": 1, "page_size": N_RECENT})
+        if isinstance(files, dict) and "data" in files:
+            files = files["data"]
+        if not files:
+            return
+    except Exception as e:
+        print(f"[plaudia-watchdog] Erreur list_files: {e}")
+        return
+
+    existing_ids = get_existing_file_ids()
+    new_files = [f for f in files if f.get("id") not in existing_ids]
+
+    if not new_files:
+        return  # SILENT — rien de nouveau
+
+    print(f"[plaudia-watchdog] {len(new_files)} nouveau(x) fichier(s) détecté(s)")
+    processed = 0
+
+    for f in new_files:
+        fid = f["id"]
+        title = f.get("name", "")
+        start_at = f.get("start_at", "")
+        duration_ms = int(f.get("duration", 0))
+        print(f"  → {title} ({fid})")
+
+        try:
+            # Métadonnées complètes
+            meta = plaud_call(token, "get_file", {"file_id": fid})
+            plaud_created = meta.get("created_at", "")
+            serial = meta.get("serial_number", "")
+
+            # Vérifier si privé
+            is_private = "[PRIVE]" in title.upper() or "[PERSO]" in title.upper()
+
+            # Transcription
+            segments = []
+            if not is_private:
+                try:
+                    transcript_data = plaud_call(token, "get_transcript", {"file_id": fid})
+                    segments = parse_transcript_segments(transcript_data)
+                except Exception as e:
+                    print(f"    ⚠️ get_transcript échoué: {e}")
+
+            raw_text = format_raw_transcript(segments) if segments else None
+            segs_json = json.dumps(segments, ensure_ascii=True) if segments else None
+
+            # Détection entreprise/projet depuis le titre ET la transcription
+            ent_id, ent_name, cand_projects = detect_enterprise(title, raw_text or "")
+            proj_id = detect_project(title, cand_projects) if cand_projects else None
+            client_name = ent_name or ""
+
+            # INSERT dans recordings via PostgREST
+            recorded_at = start_at.replace("T", " ").replace("Z", "+00") if start_at else None
+            plaud_created_esc = plaud_created.replace("T", " ").replace("Z", "+00") if plaud_created else None
+
+            row = {
+                "plaud_file_id": fid,
+                "title": title[:500],
+                "recorded_at": recorded_at,
+                "duration_seconds": duration_ms // 1000,
+                "plaud_created_at": plaud_created_esc,
+                "serial_number": serial[:200] if serial else None,
+                "transcript_segments": segs_json,
+                "raw_transcript": raw_text[:100000] if raw_text else None,
+                "is_private": is_private,
+                "status": "transcribed",
+                "owner_id": OWNER_ID,
+                "enterprise_id": ent_id,
+                "project_id": proj_id,
+                "client_name": client_name or None,
+            }
+            # Remove None values (nulls in JSON)
+            row = {k: v for k, v in row.items() if v is not None}
+
+            try:
+                supabase_insert("recordings", row)
+                processed += 1
+                if ent_id:
+                    proj_name = next((p[2] for p in projects if p[0] == proj_id), "")
+                    print(f"    ✅ Attribué à {ent_name}{' / ' + proj_name if proj_name else ''}")
+                else:
+                    print(f"    ✅ {len(segments)} segments — status=transcribed (entreprise non détectée)")
+            except Exception as e:
+                # Peut être un conflit (déjà inséré par une autre instance)
+                resp_str = str(e)
+                if "409" in resp_str or "duplicate" in resp_str.lower() or "conflict" in resp_str.lower():
+                    print(f"    ⏭️ Déjà présent en base (ignoré)")
+                else:
+                    print(f"    ❌ Erreur INSERT: {e}")
+
+        except Exception as e:
+            print(f"    ❌ Erreur traitement: {e}")
+            import traceback
+            traceback.print_exc()
+
+        time.sleep(0.3)
+
+    if processed > 0:
+        print(f"[plaudia-watchdog] {processed} fichier(s) traité(s), déclenchement du pipeline CR...")
+        subprocess.run(["hermes", "cron", "run", LLM_JOB_ID], check=False, capture_output=True, timeout=30)
 
 
 if __name__ == "__main__":
