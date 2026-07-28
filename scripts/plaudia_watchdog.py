@@ -127,6 +127,23 @@ def supabase_insert(table, row_data):
     return raw
 
 
+def supabase_update(table, row_data, id_filter):
+    """UPDATE via PostgREST PATCH. row_data = {col: val, ...}, id_filter = 'id=eq.uuid'"""
+    jwt = get_service_jwt()
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{id_filter}"
+    http_request(
+        url,
+        {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {jwt}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        },
+        row_data,
+        method="PATCH",
+    )
+
+
 def plaud_call(token, method, args):
     """Appelle une méthode MCP Plaud et retourne le résultat parsé."""
     body = {
@@ -236,15 +253,18 @@ def main():
     except Exception as e:
         print(f"[plaudia-watchdog] ⚠️ Impossible de charger les entreprises: {e}")
 
-    def detect_enterprise(title: str, transcript: str = "") -> tuple[Optional[str], Optional[str], list]:
-        """Détecte l'entreprise depuis le titre OU la transcription."""
+    def detect_enterprise(title: str) -> tuple[Optional[str], Optional[str], list]:
+        """Détecte l'entreprise depuis le TITRE uniquement.
+        
+        ATTENTION: Ne JAMAIS scanner la transcription — le transcript peut mentionner
+        n'importe quelle entreprise comme sujet ou exemple (ex: 'Avenir 85' cité dans
+        une conversation avec un client AQCF). Seul le titre du fichier Plaud est fiable
+        car c'est l'utilisateur qui le nomme explicitement.
+        """
         t = title.lower()
         for eid, ename in enterprises:
             en = ename.lower()
-            if en in t:  # match dans le titre
-                cand_projects = [pid for pid, peid, _ in projects if peid == eid]
-                return eid, ename, cand_projects
-            if transcript and en in transcript.lower():  # match dans la transcription
+            if en in t:  # match dans le titre uniquement
                 cand_projects = [pid for pid, peid, _ in projects if peid == eid]
                 return eid, ename, cand_projects
         return None, None, []
@@ -269,24 +289,79 @@ def main():
     existing_ids = get_existing_file_ids()
     new_files = [f for f in files if f.get("id") not in existing_ids]
 
-    if not new_files:
-        return  # SILENT — rien de nouveau
+    # ── Phase A : fichiers nouveaux (jamais vus) ──
+    if new_files:
+        print(f"[plaudia-watchdog] {len(new_files)} nouveau(x) fichier(s) détecté(s)")
 
-    print(f"[plaudia-watchdog] {len(new_files)} nouveau(x) fichier(s) détecté(s)")
+    # ── Phase B : retry transcription pour les fichiers déjà en base mais sans transcript ──
+    retry_recordings = []
+    try:
+        retry_rows = supabase_select(
+            "id,plaud_file_id,title",
+            "recordings",
+            "status=eq.transcribed&raw_transcript=is.null&plaud_file_id=not.is.null&duration_seconds=gt.60&order=created_at.desc&limit=10"
+        )
+        retry_recordings = retry_rows
+    except Exception as e:
+        print(f"[plaudia-watchdog] ⚠️ Erreur check retry: {e}")
+
+    if retry_recordings:
+        print(f"[plaudia-watchdog] {len(retry_recordings)} enregistrement(s) à retenter (sans transcript)")
+
     processed = 0
+    all_to_process = []
 
+    # Préparer les fichiers à traiter : nouveaux fichiers
     for f in new_files:
-        fid = f["id"]
-        title = f.get("name", "")
-        start_at = f.get("start_at", "")
-        duration_ms = int(f.get("duration", 0))
-        print(f"  → {title} ({fid})")
+        all_to_process.append({
+            "type": "new",
+            "plaud_file_id": f["id"],
+            "title": f.get("name", ""),
+            "start_at": f.get("start_at", ""),
+            "duration_ms": int(f.get("duration", 0)),
+        })
+
+    # Préparer les fichiers à retenter + réattribuer
+    for r in retry_recordings:
+        all_to_process.append({
+            "type": "retry",
+            "recording_id": r["id"],
+            "plaud_file_id": r["plaud_file_id"],
+            "title": r.get("title", ""),
+            "start_at": "",
+            "duration_ms": 0,
+        })
+
+    if not all_to_process:
+        return  # SILENT — rien à faire
+
+    for item in all_to_process:
+        fid = item["plaud_file_id"]
+        title = item["title"]
+        start_at = item["start_at"]
+        duration_ms = item["duration_ms"]
+        is_retry = item["type"] == "retry"
+        recording_id = item.get("recording_id")
+
+        print(f"  → {'[RETRY]' if is_retry else '[NEW]'} {title} ({fid})")
 
         try:
-            # Métadonnées complètes
+            # Métadonnées complètes (toujours utile même pour retry)
             meta = plaud_call(token, "get_file", {"file_id": fid})
             plaud_created = meta.get("created_at", "")
             serial = meta.get("serial_number", "")
+
+            # Pour les retry, récupérer les infos manquantes depuis Plaud
+            if is_retry:
+                plaud_name = meta.get("name", "")
+                plaud_duration = int(meta.get("duration", 0))
+                plaud_start = meta.get("start_at", "")
+                if not title and plaud_name:
+                    title = plaud_name
+                if not start_at and plaud_start:
+                    start_at = plaud_start
+                if not duration_ms and plaud_duration:
+                    duration_ms = plaud_duration
 
             # Vérifier si privé
             is_private = "[PRIVE]" in title.upper() or "[PERSO]" in title.upper()
@@ -303,8 +378,8 @@ def main():
             raw_text = format_raw_transcript(segments) if segments else None
             segs_json = json.dumps(segments, ensure_ascii=True) if segments else None
 
-            # Détection entreprise/projet depuis le titre ET la transcription
-            ent_id, ent_name, cand_projects = detect_enterprise(title, raw_text or "")
+            # Détection entreprise depuis le titre uniquement (pas le transcript — trop de faux positifs)
+            ent_id, ent_name, cand_projects = detect_enterprise(title)
             proj_id = detect_project(title, cand_projects) if cand_projects else None
             client_name = ent_name or ""
 
@@ -332,7 +407,14 @@ def main():
             row = {k: v for k, v in row.items() if v is not None}
 
             try:
-                supabase_insert("recordings", row)
+                if is_retry:
+                    # UPDATE l'enregistrement existant (ne pas recréer)
+                    upd = {k: v for k, v in row.items()
+                           if v is not None and k not in ("plaud_file_id", "owner_id", "recorded_at")}
+                    supabase_update("recordings", upd, f"id=eq.{recording_id}")
+                    print(f"    ✅ Retry: transcription + attribution mise à jour")
+                else:
+                    supabase_insert("recordings", row)
                 processed += 1
                 if ent_id:
                     proj_name = next((p[2] for p in projects if p[0] == proj_id), "")
@@ -340,12 +422,11 @@ def main():
                 else:
                     print(f"    ✅ {len(segments)} segments — status=transcribed (entreprise non détectée)")
             except Exception as e:
-                # Peut être un conflit (déjà inséré par une autre instance)
                 resp_str = str(e)
                 if "409" in resp_str or "duplicate" in resp_str.lower() or "conflict" in resp_str.lower():
                     print(f"    ⏭️ Déjà présent en base (ignoré)")
                 else:
-                    print(f"    ❌ Erreur INSERT: {e}")
+                    print(f"    ❌ Erreur write: {e}")
 
         except Exception as e:
             print(f"    ❌ Erreur traitement: {e}")
