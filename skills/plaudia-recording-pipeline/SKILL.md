@@ -80,7 +80,32 @@ When the user asks to "process new recordings" or the cron fires:
 | Watchdog script | `/opt/data/.hermes/scripts/plaudia_watchdog.py` (actif, PostgREST+JWT) — `/opt/data/scripts/plaudia_watchdog.py` (copie synchro) | Polls Plaud API, inserts recordings with enterprise detection via PostgREST. Modèle de référence dans `scripts/plaudia_watchdog.py` de cette skill. |
 | Backend FastAPI | `/opt/data/projects/plaudia/rag_backend/main.py` | CRUD, CR generation/edit, RAG chat, enterprises CRUD |
 | Supabase client | `src/integrations/supabase/herone-client.ts` | Dedicated Supabase client for Hérone project |
+| CR generation script | `scripts/generate_cr.py` in this skill | Standalone CR generator when cron is blocked. Usage: `python3 /opt/data/skills/productivity/plaudia-recording-pipeline/scripts/generate_cr.py --batch` |
 | Direct Supabase audit | `references/direct-supabase-calls-audit.md` | Every frontend→Supabase direct call mapped to the API endpoint that should replace it. Consult before migrating any remaining `heroneSupabase` calls. |
+| Keepalive script | `/opt/data/scripts/plaudia_keepalive.sh` (actif, cron) — `/opt/data/.hermes/scripts/plaudia_keepalive.sh` (copie synchro) | Relance backend + tunnel toutes les minutes. Doit exporter SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_EMAIL, SUPABASE_SERVICE_PASSWORD. |
+
+## Diagnostic protocol — « Sync Plaud ne fait rien / nouvelles transcriptions non détectées »
+
+Quand l'utilisateur signale que :
+- Le système automatique (watchdog) ne détecte pas les nouveaux enregistrements
+- Le bouton Sync (POST /v1/pipeline/trigger) ne donne rien
+- « Aucun nouvel enregistrement — tout est déjà synchronisé »
+
+**Protocole de diagnostic (upstream-first) :**
+
+1. **Vérifier le token Plaud** — `python3 -c "import json; t=json.load(open('/opt/data/mcp-tokens/plaud.json')); print('expired', t.get('expires_at',0) < __import__('time').time())"`
+2. **Lister les fichiers Plaud** — Appeler `list_files` Plaud MCP directement (pas via le watchdog). Vérifier que des fichiers récents existent et noter leur nom + id + état.
+3. **Vérifier recordings en base** — `SELECT id, title, status, raw_transcript IS NOT NULL as has_transcript, enterprise_id IS NOT NULL as has_ent, duration_seconds FROM recordings ORDER BY created_at DESC`
+4. **Vérifier la cause du blocage pour chaque fichier** :
+   - Fichier présent dans recordings avec `raw_transcript=NULL` → transcription jamais récupérée (Plaud ne l'a pas générée, ou `get_transcript` a échoué au moment du passage watchdog)
+   - Fichier présent avec `raw_transcript NOT NULL` mais `enterprise_id=NULL` → attribution manquante
+   - Fichier présent avec `duration_seconds < 60` → trop court, ne passera jamais
+5. **Vérifier si la transcription est maintenant disponible sur Plaud** — Appeler `get_transcript` MCP sur le file_id concerné. Si elle existe → PATCH le recording avec raw_transcript + enterprise détection, puis lancer le pipeline.
+6. **Rapporter à l'utilisateur** : le nombre exact de fichiers bloqués, leur titre, et pourquoi (transcript manquant / entreprise manquante / trop court).
+
+**Piège : le pipeline (cron) ne voit pas les orphelins.** Le pipeline cherche `status='transcribed' AND enterprise_id IS NOT NULL`. Si un enregistrement a `raw_transcript=NULL` MAIS `enterprise_id` a été setté (par attribution manuelle), le pipeline le verra et tentera de générer un CR avec un transcript vide → CR vide ou erreur. Vérifier les deux colonnes indépendamment.
+
+**Piège : le endpoint `POST /v1/pipeline/trigger` dit « Aucun nouvel enregistrement »** mais l'enregistrement est déjà dans la table — juste bloqué. Voir la section dédiée plus bas pour la limitation exacte de cet endpoint.
 
 ## Pitfalls discovered
 
@@ -123,15 +148,152 @@ When the user asks to "process new recordings" or the cron fires:
 
 **`hermes cron run` dans un watchdog no_agent timeout à 30s par défaut.** Le watchdog lance `subprocess.run(["hermes", "cron", "run", LLM_JOB_ID], timeout=30)` après avoir inséré des enregistrements. 30s est trop court — `hermes cron run` peut prendre >30s pour démarrer. Solution : soit `subprocess.Popen(...)` (fire-and-forget, pas d'attente), soit `timeout=300`. Si le pipeline ne se déclenche pas, lancer manuellement `cronjob(action='run', job_id=...)`.
 
-**Le pipeline cron DOIT avoir la skill `plaudia-recording-pipeline` chargée dans `skills`.** Sans skills, l'agent ne sait pas quel template HTML utiliser, ni le format A4, ni la convention de nommage. Vérifier avec `cronjob(action='list', job_id='d4777fc4327a')` que `skills` contient bien `["plaudia-recording-pipeline"]`.
+Le pipeline cron DOIT avoir la skill `plaudia-recording-pipeline` chargée dans `skills`. Sans skills, l'agent ne sait pas quel template HTML utiliser, ni le format A4, ni la convention de nommage. Vérifier avec `cronjob(action='list', job_id='d4777fc4327a')` que `skills` contient bien `["plaudia-recording-pipeline"]`.
+
+**RÈGLE CR — retranscription, PAS synthèse :** Le CR doit être une retranscription détaillée de la réunion, pas un résumé. Aucune limite de longueur. Chaque point abordé dans la transcription doit figurer dans le CR. Voir `references/cr-generation-prompt.md` pour le prompt complet.
 
 **Le watchdog doit être copié à DEUX endroits.** Le cron résout `plaudia_watchdog.py` depuis `/opt/data/scripts/` (pas `~/.hermes/scripts/`). Les deux versions doivent être synchronisées. Faire après chaque modification : `cp /opt/data/.hermes/scripts/plaudia_watchdog.py /opt/data/scripts/plaudia_watchdog.py`.
 
-**Détection entreprise : ne pas se limiter au titre — scanner aussi la transcription.** `detect_enterprise()` vérifie maintenant `enterprise_name.lower() in transcript.lower()` en plus du titre. Les fichiers Plaud ont souvent des noms non identifiants (ex: "24/07/2026") mais la transcription contient le nom de l'entreprise.
+**Détection entreprise : TITRE UNIQUEMENT — ne JAMAIS scanner la transcription.** L'ancienne approche (scanner le transcript) cause des **faux positifs** : le mot "Avenir 85" apparaît dans une conversation avec un client AQCF (qui le mentionne comme exemple), et l'attribution se fait sur Avenir 85 au lieu d'AQCF. La transcription mentionne des noms d'entreprises comme sujets, exemples, ou concurrents — seul le titre du fichier Plaud (nommé par l'utilisateur) est fiable. Depuis le correctif du 28/07/2026, `detect_enterprise()` dans le watchdog ne reçoit plus le paramètre `transcript` et ne matche que sur le titre. Voir la fonction dans `/opt/data/.hermes/scripts/plaudia_watchdog.py`.
+
+**Toujours vérifier ton attribution en lisant la transcription avant d'agir.** Quand tu attribues un enregistrement à une entreprise détectée dans le transcript (même depuis le titre), lis les 1000-2000 premiers caractères du transcript pour confirmer que c'est bien le client. Yohann Richard d'AQCF mentionne "Avenir 85" comme exemple dans sa conversation → la détection automatique a attribué à Avenir 85. Une simple lecture du transcript aurait montré que le client était AQCF. Cette vérification est obligatoire avant toute création/modification d'attribution.
 
 **Convention de nommage des enregistrements :** `[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]`. Exemple : `Veron Diet — Consultation client — Refonte site web et automatisation IA — 24/07/2026`. Le trigger DB `trg_update_recording_title` met à jour automatiquement le titre quand `enterprise_id` est setté, mais le format doit être correct.
 
 **Le scheduler Hermes peut se figer sans warning.** Dans une session réelle, les crons n'ont pas déclenché depuis 4 jours (last_run_at figé) alors que le processus `hermes dashboard` tournait normalement. Aucun log d'erreur. Diagnostic : vérifier `hermes cron list` — si tous les `next_run_at` sont dans le passé, le scheduler est bloqué. Solution : redémarrer Hermes ou recréer les crons. Les jobs manuels via `cronjob(action='run')` fonctionnent même quand le scheduler est bloqué.
+
+**`cronjob(action='run')` peut être bloqué par « Already being fired by the scheduler ».** Même si le scheduler est bloqué/figé, il peut marquer un job comme « en cours d'exécution » et refuser les runs manuels avec `execution_skipped: "Already being fired by the scheduler"`. Dans ce cas, `cronjob(action='run')` ne peut pas forcer le pipeline. Solution : utiliser le script `scripts/generate_cr.py` dans cette skill qui génère le CR manuellement en appelant OpenRouter/DeepSeek et en insérant le résultat dans `crs` via PostgREST :
+
+```bash
+python3 /opt/data/skills/productivity/plaudia-recording-pipeline/scripts/generate_cr.py --batch
+```
+
+Ou pour un seul enregistrement :
+```bash
+python3 /opt/data/skills/productivity/plaudia-recording-pipeline/scripts/generate_cr.py <recording_id>
+```
+
+Le script gère : JWT auth, glossaire, appel LLM, extraction HTML, insertion CR, et mise à jour du statut. Voir le script pour la documentation complète.
+
+**Module-level `get_service_owner_id()` crash au démarrage.** Ne jamais appeler `get_service_owner_id()` (ou `get_service_token()`) au niveau module — ces fonctions appellent `auth.py` qui tente un login Supabase à l'import. Si le mot de passe service account est manquant/incorrect, le backend ne démarre PAS (crash avant `uvicorn.run`). Toujours appeler ces fonctions **lazy** à l'intérieur des fonctions endpoint. Vérifier avec `python3 -c "import ast; ast.parse(open('main.py').read())"` après modification.
+
+**`SUPABASE_SERVICE_PASSWORD` peut être absente du `.env`.** Le module `auth.py` lit `SUPABASE_SERVICE_EMAIL` et `SUPABASE_SERVICE_PASSWORD` depuis les variables d'environnement. Si `SUPABASE_SERVICE_PASSWORD` est absente, le backend ne peut pas obtenir de JWT service account et crash au démarrage. Le watchdog utilise le mot de passe hardcodé `"Herone2026test"` mais le backend utilise les env vars. Vérifier avec `source /opt/data/.env 2>/dev/null; echo "len=${#SUPABASE_SERVICE_PASSWORD}"`. Si absent, ajouter `SUPABASE_SERVICE_PASSWORD=Herone2026test` au `.env`.
+
+**`tuple.get("return", None)` erreur de syntaxe dans les fonctions imbriquées.** Quand on définit une fonction avec type hint `tuple` à l'intérieur d'une fonction endpoint, faire attention à la syntaxe. `def _detect_ent(...) -> tuple.get("return", None)` n'est pas du Python valide — utiliser simplement `def _detect_ent(...) -> tuple:`. Ce bug provoque une `SyntaxError` au démarrage du backend.
+
+**MCP Supabase peut être injoignable dans les sessions cron.** Le pipeline s'appuie sur `mcp_supabase_execute_sql` pour interroger les recordings, mais le serveur MCP peut être down (4+ échecs consécutifs, pas de retry automatique). Fallback : utiliser PostgREST directement avec le même JWT que le watchdog (`martin@herone.fr` / mot de passe hardcodé dans `plaudia_watchdog.py`). Écrire un petit script Python dans `/opt/data/work/plaudia/` qui fait `urllib.request` → `auth/v1/token?grant_type=password` → `rest/v1/recordings?select=...&status=eq.transcribed...`. Le script `query_recordings.py` de la session du 27/07/2026 est un template réutilisable. Ne pas tenter `execute_code` qui est bloqué en cron — utiliser `terminal` avec `python3 script.py`.
+
+**Pipeline vide : vérifier aussi les orphelins.** Quand `SELECT ... WHERE status='transcribed' AND enterprise_id IS NOT NULL` retourne 0 résultats, il peut y avoir des recordings en statut `transcribed` mais sans entreprise (orphelins). Les compter et les rapporter dans le rapport plutôt que de répondre directement [SILENT]. Si des orphelins existent, le pipeline est bloqué par l'attribution — signaler combien et leur titre/date pour que l'utilisateur puisse les attribuer manuellement.
+
+**Important nuance : un orphelin peut aussi être bloqué par l'absence de transcription.** Vérifier `raw_transcript IS NULL` pour chaque orphelin :
+  - Orphelin avec `raw_transcript` non NULL → bloqué par attribution uniquement → l'utilisateur peut attribuer et le pipeline reprendra.
+  - Orphelin avec `raw_transcript` NULL ET `get_transcript` Plaud retourne `[]` → transcription pas encore disponible (fichier récent) ou jamais disponible (fichier trop court). Dans ce cas même l'attribution ne débloque pas le CR — signaler le fichier comme « en attente de transcription » et ne pas proposer l'attribution comme seule solution.
+  - Orphelin très court (<60s) avec `raw_transcript` NULL : Plaud ne générera probablement jamais de transcription. Passer en `status='error'` directement (la colonne `error_reason` n'existe pas dans `recordings`, ne pas tenter de la renseigner).
+
+Ne pas combiner [SILENT] avec un rapport d'orphelins — signaler toujours les orphelins séparément même si aucun pipeline n'est exécuté. Si aucun orphelin non plus (ni avec transcript, ni sans), répondre [SILENT] normalement.
+
+**Forcer « À classer » enterprise_id quand la détection échoue.** Le `POST /v1/pipeline/trigger` endpoint force l'entreprise « À classer » (UUID `531601d2-...`) quand aucune entreprise n'est détectée dans le titre. Ceci évite les CRs orphelins bloqués. Le watchdog (`plaudia_watchdog.py`) ne fait PAS ce forcing — il laisse `enterprise_id=NULL`. Si le pipeline ne trouve rien, vérifier si le watchdog a inséré des enregistrements sans entreprise. Le trigger `trg_propagate_enterprise_to_crs` ne peut pas propager une valeur NULL. Solution : soit backfill manuellement depuis le frontend, soit appeler `POST /v1/pipeline/trigger` qui force l'attribution. Le frontend a un bloc Rattachement dans CRDetailView pour l'attribution manuelle.
+
+**Le watchdog ne retente PAS `get_transcript` pour les fichiers déjà en base (HISTORIQUE — fixé le 28/07/2026).** Le problème historique : le watchdog comparait les fichiers Plaud avec `recordings.plaud_file_id` et les ignorait s'il étaient déjà dans la table — même si `get_transcript` avait échoué. **Correctif appliqué le 28/07/2026 :** Le watchdog a maintenant une **Phase B** qui interroge les recordings avec `raw_transcript IS NULL AND duration_seconds > 60` et retente `get_transcript` à chaque passage (5 min). Si la transcription est maintenant disponible, elle est UPDATE dans l'enregistrement (PATCH PostgREST) avec ré-attribution d'entreprise. Voir le script `/opt/data/.hermes/scripts/plaudia_watchdog.py`, fonction `main()` → boucle `all_to_process` avec `is_retry=True`. Sans cette correction, un fichier enregistré juste avant un passage du watchdog restait orphelin pour toujours.
+
+**Short recordings (<60s) can't be detected as "never getting a transcript" vs "not yet available".** The watchdog inserts ALL Plaud files with `status='transcribed'` even if `duration_seconds < 60`. Plaud won't generate a transcript for these (too short), so they stay in `status='transcribed'` forever with `raw_transcript=NULL`. They block the pipeline (which needs `enterprise_id IS NOT NULL`) and confuse diagnostics because the user sees a "pending" recording that will never resolve. Fix: in the watchdog, skip insertion of files with `duration_seconds < 60` entirely (they'll never produce a CR), or insert them directly with `status='error'`. The pipeline's `Important nuance` section below covers this but the **watchdog** is the right layer to enforce it — by the time the pipeline runs, the recording is already in limbo.
+
+**❗ `error_reason` column DOES NOT exist in `recordings` table.** The skill and various pitfalls mention setting `error_reason='Recording too short...'` when marking short recordings as error. But PostgREST returns 400 on any PATCH that includes `error_reason` — the column was never added to the schema, or was dropped. When marking a recording as `error`, only PATCH with `{"status": "error"}` works (returns 204). The error reason must be documented elsewhere (e.g., a `notes` column if it exists, or solely via the `status` change).
+
+**`generate_cr.py` syntax quirk.** The standalone CR generator at `scripts/generate_cr.py` had a syntax error (`""""` instead of `"""` closing the module docstring on line 23) which caused `SyntaxError: unterminated string literal` on first run. This has been fixed. If the file ever gets regenerated or re-downloaded from the deployment template, re-check that the docstring closes with exactly 3 quotes.
+
+**`generate_cr.py` now fetches glossary from DB.** Previously the script used a hardcoded `GLOSSARY` dict with only 6 shared entries (Eron→Hérone, INX→Hynix, etc.). It now calls `fetch_glossary_from_db()` to pull all entries from the Supabase `glossary` table (including personal corrections like `dasn→dans`, `TestErreur→TestCorrigé`, `décision t prochaines etape→décisions et prochaines étapes`) and merges them with the hardcoded defaults (DB wins on conflict). The result is cached for the process lifetime. If the DB is unreachable, it falls back to the hardcoded set with a warning.
+
+**`generate_cr.py` does NOT update the recording title to convention format.** Pipeline step 2h says to set `title='[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]'`, but the script only sets `status='ready'`. Determining the meeting type and subject requires parsing the LLM's generated CR HTML (header and section headers), which adds complexity. After running `generate_cr.py`, manually set the title by either:
+  - Reading the CR content from `crs` table and inferring type/subject
+  - Updating via PostgREST PATCH directly
+
+**⚠️ The model-generated CR header structure may not match the template.** The template specifies `<p class="cr-logo">` (text) + `<p class="cr-subtitle">` + `<dl class="cr-meta">` for the header block. In practice, the LLM (DeepSeek V4 Flash) often generates a different structure: `<div class="cr-logo"><img ...></div>` + `<div class="cr-meta">` with `<div class="cr-meta-item"><span class="cr-label">Type</span>...</div>` cards instead of a definition list. This means:
+  - Parsing `cr-subtitle` from the generated HTML may return nothing — the meeting type is instead in `cr-meta-item span.cr-label` following sibling text.
+  - Fallback strategy: after `generate_cr.py` completes, read the CR content, search for `cr-meta-item` with label "Type" or "Nature" to extract the meeting type, then build the convention title. If neither structure is present, fall back to the recording's `client_name` and a generic type like "Réunion".
+
+**`POST /v1/pipeline/trigger` ne détecte pas les recordings en attente de retry.** L'endpoint ne vérifie que les fichiers Plaud qui ne sont **pas encore** dans `recordings.plaud_file_id`. Il ne vérifie PAS :
+  - Les recordings avec `raw_transcript=NULL` et `duration_seconds > 60` qui ont besoin d'une nouvelle tentative de transcription (transcript maintenant disponible chez Plaud)
+  - Les recordings avec `status='transcribed'` et `enterprise_id=NULL` qui ont besoin d'attribution forcée à « À classer »
+  - Les recordings avec `duration_seconds < 60` qui devraient être marquées `status='error'`
+  
+  Conséquence : quand un utilisateur clique sur « Sync Plaud », il voit « Aucun nouvel enregistrement » même si un fichier de ce matin attend sa transcription depuis 3 heures. Le endpoint devrait avoir une **deuxième phase** après la détection des nouveaux fichiers : requêter `recordings` pour `status='transcribed' AND (raw_transcript IS NULL OR enterprise_id IS NULL)` et gérer chaque cas (retry transcript, attribution forcée, error si <60s).
+
+**Keepalive script : exporter TOUTES les vars Supabase ou le backend démarre sans credentials.** Le cron `plaudia-keepalive` (* * * * *, script shell) relance le backend s'il est mort. Le script actif est `/opt/data/scripts/plaudia_keepalive.sh`. Il doit exporter `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_EMAIL`, `SUPABASE_SERVICE_PASSWORD` en plus des clés API. Si ces vars manquent, le backend démarre mais retourne 502/erreur sur tous les endpoints qui appellent Supabase (PostgREST). Vérifier avec `grep 'export' /opt/data/scripts/plaudia_keepalive.sh`. Les deux versions (`/opt/data/scripts/` et `/opt/data/.hermes/scripts/`) doivent être synchronisées — faire après chaque modification : `cp /opt/data/scripts/plaudia_keepalive.sh /opt/data/.hermes/scripts/plaudia_keepalive.sh`.
+
+**`GET /v1/crs` → 502 : diagnostic.** Si le frontend affiche une erreur 502 sur la page "Comptes rendus" :
+1. Vérifier le backend local : `curl -s http://localhost:8000/v1/crs -H "X-Plaudia-Key: $PLAUDIA_SHARED_KEY"`. Si 200, le backend tourne correctement.
+2. Vérifier les logs du backend : `tail -50 /opt/data/plaudia_backend.log`. Si le backend a été relancé récemment, les vars Supabase manquent peut-être (voir pitfall keepalive ci-dessus).
+3. Vérifier le keepalive script : `grep 'export' /opt/data/scripts/plaudia_keepalive.sh` — `SUPABASE_URL` doit être dans la liste d'export.
+4. Si le tunnel Cloudflare retourne 403, vérifier que les vars `VITE_CF_CLIENT_ID` et `VITE_CF_CLIENT_SECRET` sont configurées dans Lovable.
+
+## Endpoint « Sync Plaud » — `POST /v1/pipeline/trigger` (27/07/2026)
+
+Un endpoint on-demand ajouté au backend FastAPI qui exécute **le pipeline complet** en une requête HTTP, équivalent à ce que le watchdog fait automatiquement toutes les 5 minutes mais déclenché manuellement depuis le frontend.
+
+### ⚠️ Limitation critique : ne gère pas les recordings en attente de retry
+
+L'endpoint ne vérifie que les fichiers Plaud **nouveaux** (pas encore dans `recordings.plaud_file_id`). Il ne vérifie PAS les recordings déjà présents qui auraient besoin de :
+
+  - **Retry transcription** — `raw_transcript IS NULL AND duration_seconds > 60` : le fichier a été inséré par le watchdog avant que Plaud ait fini la transcription. La transcription est maintenant disponible, mais personne ne la récupère.
+  - **Attribution forcée** — `enterprise_id IS NULL AND status='transcribed'` : l'entreprise n'a pas été détectée. L'endpoint `POST /v1/pipeline/trigger` force pourtant l'attribution à « À classer » pour les **nouveaux** fichiers, mais pas pour les existants.
+  - **Short recordings** — `duration_seconds < 60 AND raw_transcript IS NULL` : le fichier est trop court, Plaud ne générera jamais de transcription. Devrait être marqué `status='error'` directement.
+
+**Piège (« rien ne se passe ») :** L'utilisateur clique sur « Sync Plaud », l'endpoint répond « Aucun nouvel enregistrement — tout est déjà synchronisé », et l'enregistrement de ce matin (déjà dans recordings mais sans transcription) reste bloqué. Le message devrait être plus précis, et l'endpoint devrait avoir une **deuxième phase** qui traite les recordings en attente.
+
+**Correction recommandée :** Ajouter dans `POST /v1/pipeline/trigger` une phase après la détection des nouveaux fichiers :
+
+```python
+# Phase 2 : retry des recordings en attente
+stuck = supabase_select(
+    "id,title,plaud_file_id,duration_seconds",
+    "recordings",
+    "status=eq.transcribed&and=(raw_transcript.is.null,enterprise_id.is.null)&order=created_at.desc"
+)
+for rec in stuck:
+    if rec.get("duration_seconds", 0) < 60:
+                    supabase_update("recordings", rec["id"], {"status": "error"})  # error_reason column doesn't exist
+    else:
+        transcript = plaud_call(token, "get_transcript", {"file_id": rec["plaud_file_id"]})
+        if transcript:
+            # update raw_transcript + retry detection
+            ...
+```
+
+### Ce qu'il fait
+
+1. **Liste les fichiers Plaud** via `list_files` MCP (20 plus récents)
+2. **Filtre** ceux déjà présents dans `recordings.plaud_file_id`
+3. Pour chaque nouveau fichier :
+   - `get_file` → métadonnées (created_at, serial_number, start_at, duration)
+   - `get_transcript` → segments timestampés (si pas privé)
+   - Parse en format standardisé `{speaker, content, start_time, end_time}`
+   - Détecte l'entreprise depuis le **titre uniquement** (pas le transcript — trop de faux positifs, voir pitfall dédié)
+   - Détecte le projet associé
+   - Insère dans `recordings` avec `status='transcribed'`
+4. **Déclenche** le pipeline LLM de génération CR (cooldown 120s anti-double-clic)
+
+### Endpoint
+
+```
+POST /v1/pipeline/trigger
+Auth: X-Plaudia-Key (shared key) ou JWT Supabase Auth
+Body: {} (vide)
+Response: {status, step, new_count, processed, inserted: [{file_id, title, enterprise, has_transcript, duration_seconds}], pipeline_triggered, errors, message}
+```
+
+### Fonctions helpers ajoutées dans main.py
+
+| Fonction | Rôle |
+|---|---|
+| `_plaud_get_file(token, file_id)` | Appelle `get_file` MCP Plaud → métadonnées |
+| `_plaud_get_transcript(token, file_id)` | Appelle `get_transcript` MCP Plaud → segments |
+| `_parse_plaud_segments(transcript_data)` | Transforme les segments bruts en format standardisé |
+| `_format_raw_transcript(segments)` | Concatène `Speaker : content` en texte brut |
+
+### Frontend
+
+Le bouton « Sync Plaud » dans le frontend Lovable appelle `POST /v1/pipeline/trigger` via `hermesAPI`. Le prompt Lovable pour le créer est dans la session du 27/07/2026.
 
 ## Behind the scenes
 
@@ -173,3 +335,4 @@ bash setup-plaudia.sh
 - `references/frontend-architecture.md` — frontend structure, enterprise view, project view, scope system
 - `references/plaudia-cr-v3.md` — CR edit V3, Chart.js → SVG migration
 - `references/direct-supabase-calls-audit.md` — **NEW 20/07** — audit of direct Supabase calls vs API endpoints, migration plan, missing endpoints, `is_system` flag for projects
+- `references/pipeline-diagnostics.md` — PostgREST fallback when MCP Supabase is down, orphan recording detection, reusable query scripts
