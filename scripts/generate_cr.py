@@ -305,7 +305,7 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut faire 10 000 mots ou plus.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement.
-- Structure HTML plate (PAS de sections imbriquees) : <h1>H É R O N E</h1> > <p class="cr-subtitle"> (1 ligne) > <p class="cr-meta"> (infos avec <br>) > <hr class="cr-divider"> > <h2 style=break-after:avoid> > <p> > <ul> > <table class=cr-table style=break-inside:avoid> > <p class=cr-footer>. Les h1/h2/p/ul/table sont freres directs dans body. PAS de <section>/<article>/cr-body.
+- Structure HTML plate : <h1>H É R O N E</h1> > <p class="cr-subtitle"> (1 ligne) > <p class="cr-meta"> (infos avec <br>) > <hr class="cr-divider"> > <div style=break-inside:avoid> <h2 style=break-after:avoid;page-break-after:avoid> <p> <ul> </div> (un div par section, PAS de section/article/cr-body) > <table class=cr-table style=break-inside:avoid> > <p class=cr-footer>.
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
 
 CONTEXTE :

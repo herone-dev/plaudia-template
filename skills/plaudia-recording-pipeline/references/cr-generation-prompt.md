@@ -31,17 +31,21 @@ STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
 
   <hr class="cr-divider">
 
-  <!-- Sections : chaque H2 + ses contenus sont des frères directs -->
-  <h2 style="break-after:avoid;">Présentation de l'activité</h2>
-  <p>...</p>
-  <p>...</p>
+  <!-- Sections : chaque H2 + ses contenus dans un div avec break-inside:avoid pour éviter les titres orphelins -->
+  <div style="break-inside:avoid;page-break-inside:avoid;">
+    <h2 style="break-after:avoid;page-break-after:avoid;">Présentation de l'activité</h2>
+    <p>...</p>
+    <p>...</p>
+  </div>
 
-  <h2 style="break-after:avoid;">Deuxième section</h2>
-  <p>...</p>
-  <ul>
-    <li>...</li>
-    <li>...</li>
-  </ul>
+  <div style="break-inside:avoid;page-break-inside:avoid;">
+    <h2 style="break-after:avoid;page-break-after:avoid;">Deuxième section</h2>
+    <p>...</p>
+    <ul>
+      <li>...</li>
+      <li>...</li>
+    </ul>
+  </div>
 
   <!-- Tableau final : Décisions, Actions, Prochaine étape -->
   <table class="cr-table">
@@ -64,13 +68,15 @@ STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
 </body>
 
 RÈGLES DE STRUCTURE :
-- PAS de <section>, PAS de <article>, PAS de <div class="cr-section">, PAS de <div class="cr-body">. Les h1, p.cr-subtitle, p.cr-meta, hr, h2, p, ul, table sont des FRÈRES DIRECTS dans le <body>.
+- Chaque section (H2 + ses contenus) doit être dans un <div style="break-inside:avoid;page-break-inside:avoid;"> pour éviter les titres orphelins (titre en bas de page, contenu en page suivante).
+- PAS de <section>, PAS de <article>, PAS de <div class="cr-section"> ou <div class="cr-body">. Chaque div contient UN H2 + ses p/ul associés. Les div sont des frères directs dans le <body>.
+- Le H1 et le header (subtitle, meta, divider) NE sont PAS dans un div — ils sont frères directs des div de sections.
 - Le H1 doit être EXACTEMENT "H É R O N E" (avec espaces entre les lettres) — c'est le logo. Jamais autre chose dans le H1.
 - Le p.cr-subtitle contient la description de la réunion sur UNE SEULE LIGNE (pas de <br>).
 - Le p.cr-meta contient les infos avec des <br> entre chaque ligne. Jamais tout sur une même ligne.
-- Chaque H2 doit porter style="break-after:avoid;" en inline.
-- Chaque tableau doit porter style="break-inside:avoid;" en inline.
-- Aucun bloc ne doit dépasser ~900px de haut. Si un sujet est long, découper en plusieurs <p>.
+- Chaque H2 doit porter style="break-after:avoid;page-break-after:avoid;" en inline.
+- Chaque tableau doit porter style="break-inside:avoid;page-break-inside:avoid;" en inline.
+- Aucun bloc (div, p, ul, table) ne doit dépasser ~900px de haut. Si un sujet est long, découper en plusieurs <p>.
 - <div class="page-break"></div> entre les grandes sections si besoin (le CSS gère le break-before).
 - PAS de text-align: justify. PAS de word-break: break-all.
 - Retourne UNIQUEMENT le HTML à partir de <body>, sans commentaire avant/après.
@@ -183,7 +189,8 @@ Le front affiche les CR dans un paginateur qui découpe le HTML en feuilles A4. 
 - `<p class="cr-subtitle">` — description réunion sur une ligne
 - `<p class="cr-meta">` — infos avec `<br>` entre chaque ligne
 - `<hr class="cr-divider">` — séparateur
-- `<h2 style="break-after:avoid;">`, `<p>`, `<ul>`, `<table>` comme frères directs
+- `<div style="break-inside:avoid;">` — chaque section : H2 + p/ul associés, pour éviter les titres orphelins
+- `<table class="cr-table" style="break-inside:avoid;">` — tableau final
 
 ### Règles
 - Aucun `<p>`, `<ul>` ou `<table>` ne doit dépasser ~900px de haut
