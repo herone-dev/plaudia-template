@@ -87,6 +87,7 @@ RÈGLES DE STRUCTURE :
 - Les accents français DOIVENT être corrects (é, à, è, ê, î, ô, û, ç, etc.). Vérifie chaque mot.
 - Le prénom et le nom des participants doivent être complets (ex: "Yohan Richard" pas juste "Richard").
 - L'adresse email du client (si donnée dans la transcription) doit figurer dans le bloc meta avec "Contact :".
+- La numérotation des pages est gérée automatiquement par le CSS (@page @bottom-center). Ne pas ajouter de numéros de page manuels dans le HTML.
 ```
 
 ## Template CSS (templates.html_template — is_default=true)
@@ -181,6 +182,15 @@ ul li {
 .page-break {
   break-before: page;
   page-break-before: always;
+}
+@page {
+  margin: 14mm 18mm;
+  @bottom-center {
+    content: "Page " counter(page);
+    font-size: 10px;
+    color: #9ca3af;
+    font-family: Inter, -apple-system, sans-serif;
+  }
 }
 ```
 

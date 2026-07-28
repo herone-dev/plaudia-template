@@ -211,7 +211,8 @@ ul li { margin: 7px 0; padding-left: 4px; line-height: 1.65; }
 .cr-table td, .cr-table th { padding: 10px 14px; vertical-align: top; border: 1px solid #000000; color: #000000; line-height: 1.6; }
 .cr-table-label { font-weight: 600; color: #000000; width: 26%; font-size: 13px; vertical-align: middle; background-color: #ffffff; }
 .cr-footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; }
-.page-break { break-before: page; page-break-before: always; }"""
+.page-break { break-before: page; page-break-before: always; }
+@page { margin: 14mm 18mm; @bottom-center { content: "Page " counter(page); font-size: 10px; color: #9ca3af; font-family: Inter, -apple-system, sans-serif; } }"""
     # Strip DOCTYPE/html/head/body if the model included them
     for tag in ["<!DOCTYPE html>", "<html", "</html>", "<head>", "</head>", "<body>", "</body>"]:
         llm_html = llm_html.replace(tag, "")
@@ -272,8 +273,16 @@ def update_recording_status(recording_id, title=None):
 
 
 def postprocess_html(html):
-    """Fix common issues: missing French accents, wrong footer."""
-    # Fix missing accents (DeepSeek V4 Flash tends to drop them)
+    """Fix common issues: missing French accents, wrong footer, systematically."""
+    # 1. Force correct footer whatever the LLM generated
+    html = re.sub(
+        r'<p class="cr-footer">.*?</p>',
+        '<p class="cr-footer">Compte rendu généré par Hérone</p>',
+        html,
+        flags=re.DOTALL
+    )
+    
+    # 2. Fix missing accents (DeepSeek V4 Flash tends to drop them)
     replacements = {
         "Dcision": "Décision",
         "Dcisions": "Décisions",
@@ -369,6 +378,7 @@ RÈGLES NON NÉGOCIABLES :
 - Les accents français DOIVENT être corrects (é, à, è, ê, î, ô, û, ç, etc.). Vérifie chaque mot y compris dans le tableau final.
 - Le prénom et le nom des participants doivent être complets (ex: "Yohan Richard" pas juste "Richard").
 - L'adresse email du client (si donnée dans la transcription) doit figurer dans le bloc meta avec "Contact :".
+- La numérotation des pages est gérée automatiquement par le CSS. Ne pas ajouter de numéros de page manuels.
 
 CONTEXTE :
 - Client : {client_name or "Non spécifié"}
