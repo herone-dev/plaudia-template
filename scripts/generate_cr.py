@@ -188,10 +188,8 @@ def extract_html(llm_response):
 
 
 def build_cr_html(recording, llm_html):
-    """Wrap the LLM-generated article content in full HTML document with CSS."""
-    # Read the CSS template from the skill's reference
-    css = """
-.cr-document {
+    """Wrap the LLM-generated flat HTML in full HTML document with CSS."""
+    css = """body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   color: #374151;
   max-width: 760px;
@@ -201,32 +199,22 @@ def build_cr_html(recording, llm_html):
   line-height: 1.75;
   background: #ffffff;
 }
-.cr-logo { font-size: 26px; font-weight: 800; letter-spacing: 6px; color: #1e3a5f; margin: 0 0 4px 0; line-height: 1; }
-.cr-subtitle { color: #6b7280; font-size: 13px; margin: 0 0 16px 0; font-weight: 400; }
-.cr-divider { border: none; border-top: 1px solid #e5e7eb; margin: 0 0 20px 0; }
-.cr-meta { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; margin-bottom: 32px; }
-.cr-meta dt { font-weight: 600; color: #111827; white-space: nowrap; }
-.cr-meta dt::after { content: " :"; }
-.cr-meta dd { margin: 0; color: #374151; }
-.cr-section { margin-bottom: 8px; }
-.cr-section-title { color: #1e3a5f; font-size: 18px; font-weight: 700; margin: 36px 0 0 0; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; line-height: 1.3; }
-.cr-section:first-of-type .cr-section-title { margin-top: 24px; }
-.cr-subsection { margin-top: 4px; }
-.cr-subsection-title { color: #1d4ed8; font-size: 14px; font-weight: 600; margin: 20px 0 6px 0; line-height: 1.4; }
-.cr-body { margin: 10px 0; hyphens: auto; color: #374151; }
-.cr-list { margin: 10px 0 10px 22px; padding: 0; color: #374151; }
-.cr-list li { margin: 7px 0; padding-left: 4px; }
+h1 { font-size: 26px; font-weight: 800; letter-spacing: 6px; color: #1e3a5f; margin: 0 0 8px 0; line-height: 1.2; }
+.cr-meta { color: #6b7280; font-size: 13px; margin: 0 0 32px 0; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+h2 { color: #1e3a5f; font-size: 18px; font-weight: 700; margin: 36px 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; line-height: 1.3; }
+p { margin: 10px 0; color: #374151; }
+ul { margin: 10px 0 10px 22px; padding: 0; color: #374151; }
+ul li { margin: 7px 0; padding-left: 4px; line-height: 1.65; }
 .cr-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-.cr-table td { padding: 11px 15px; vertical-align: top; border: 1px solid #000000; color: #000000; }
+.cr-table td { padding: 11px 15px; vertical-align: top; border: 1px solid #000000; color: #000000; line-height: 1.65; }
 .cr-table-label { font-weight: 600; color: #000000; width: 28%; font-size: 13px; vertical-align: middle; background-color: #ffffff; }
-.cr-table-content { background-color: #fff; color: #000000; width: 72%; }
 .cr-footer { margin-top: 52px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; }
-.cr-footer p { margin: 0; }
-"""
-    if llm_html.startswith("<!DOCTYPE html>"):
-        return llm_html
-    if llm_html.startswith("<article"):
-        return f"""<!DOCTYPE html>
+.page-break { break-before: page; page-break-before: always; }"""
+    # Strip DOCTYPE/html/head/body if the model included them
+    for tag in ["<!DOCTYPE html>", "<html", "</html>", "<head>", "</head>", "<body>", "</body>"]:
+        llm_html = llm_html.replace(tag, "")
+    llm_html = llm_html.strip()
+    return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
@@ -237,7 +225,6 @@ def build_cr_html(recording, llm_html):
 {llm_html}
 </body>
 </html>"""
-    return llm_html
 
 
 def insert_cr(recording_id, html_content, enterprise_id, project_id):
@@ -316,8 +303,7 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut faire 10 000 mots ou plus.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement.
-- Structure HTML : <article class="cr-document" data-format="A4"> avec header <p class="cr-logo">H É R O N E</p> + <dl class="cr-meta"> (dt/dd) > sections (cr-section, cr-section-title, cr-body, cr-subsection avec avoid-break) > tableau final obligatoire (cr-table, cr-table-label, pas de couleur de fond, bordures noires) > footer (cr-footer : uniquement "Document généré par Plaudia — Hérone", pas de répétition du logo).
-- Utilise <div class="page-break"> entre les sections principales et <section class="avoid-break"> sur les blocs insécables.
+- Structure HTML plate (PAS de sections imbriquees) : <h1>Titre</h1> + <p class="cr-meta"> meta > <h2> sections thematiques > <p>, <ul>, <table> comme freres directs dans <body>. Jamais de <section>, <article>, <div class="cr-section"> ou <div class="cr-body">. Chaque h2 inline: style=break-after:avoid. Chaque <table> inline: style=break-inside:avoid. <div class="page-break"> entre grandes sections. Tableau final (cr-table, cr-table-label, pas de fond, bordures noires). Footer: <p class="cr-footer">Document genere par Plaudia — Herone</p>.
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
 
 CONTEXTE :

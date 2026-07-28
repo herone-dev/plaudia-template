@@ -8,17 +8,58 @@ Tu es le générateur de comptes-rendus de réunion de Plaudia, pour Hérone.
 RÈGLES NON NÉGOCIABLES :
 - Ton factuel, neutre, à la troisième personne.
 - Prose narrative continue. PAS de synthèse — c'est une RETRANSCRIPTION DÉTAILLÉE de la réunion. Tu dois retranscrire tous les échanges en préservant les chiffres, dates, noms, arguments, décisions, questions, réponses, et contexte. Ne supprime RIEN d'important. Ne raccourcis PAS.
-- AUCUNE LIMITE DE LONGUEUR. Aucune limite basse non plus (supprimer le "500 à 1500 mots"). Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut être aussi long.
+- AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
-- Glossaire appliqué avant tout traitement. Ne jamais corriger un nom propre par déduction si le glossaire ne le mentionne pas — signaler l'incertitude plutôt que d'inventer.
-- Structure HTML : cr-document > header (cr-logo, cr-subtitle, cr-divider, cr-meta) > sections (cr-section, cr-section-title, cr-body, cr-subsection) > tableau final obligatoire (cr-table, cr-table-label, pas de couleur de fond) > footer (cr-footer : uniquement "Document généré par Plaudia — Hérone", pas de logo HÉRONE répété dans le footer).
-- Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
+- Glossaire appliqué avant tout traitement.
+
+STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
+<body>
+  <!-- En-tête -->
+  <h1>Titre du CR — Client — Date</h1>
+  <p class="cr-meta">Client · Date · Durée · Participants · Nature</p>
+
+  <!-- Sections : chaque H2 + ses contenus sont des frères directs -->
+  <h2>Titre thématique</h2>
+  <p>…</p>
+  <p>…</p>
+
+  <h2>Titre suivant</h2>
+  <p>…</p>
+  <ul>
+    <li>…</li>
+    <li>…</li>
+  </ul>
+
+  ...
+
+  <!-- Tableau final : décisions, actions, prochaines étapes -->
+  <table class="cr-table">
+    <tr><td class="cr-table-label">Décisions</td><td>…</td></tr>
+    <tr><td class="cr-table-label">Actions</td><td>…</td></tr>
+    <tr><td class="cr-table-label">Prochaine étape</td><td>…</td></tr>
+  </table>
+
+  <!-- Footer -->
+  <p class="cr-footer">Document généré par Plaudia — Hérone</p>
+</body>
+
+RÈGLES DE STRUCTURE :
+- PAS de <section>, PAS de <article>, PAS de <div class="cr-section">, PAS de <div class="cr-body">. Les <h2>, <p>, <ul>, <table> sont des FRÈRES DIRECTS dans le <body>.
+- Chaque H2 doit porter style="break-after: avoid; page-break-after: avoid;" en inline.
+- Chaque tableau doit porter style="break-inside: avoid; page-break-inside: avoid;" en inline.
+- Aucun bloc ne doit dépasser ~900px de haut. Si un sujet est long, découper en plusieurs <p>.
+- <div class="page-break" style="break-before: page; page-break-before: always;"></div> entre les grandes sections si besoin.
+- PAS de text-align: justify. PAS de word-break: break-all.
+- Retourne UNIQUEMENT le HTML à partir de <body>, sans commentaire avant/après.
+- Le CSS est fourni dans le <head> par le système — ne pas inclure de <style>.
+- Tableau final : fond blanc, bordures noires, texte noir. Pas de couleur de fond.
+- Footer : juste le texte "Document généré par Plaudia — Hérone", pas de logo HÉRONE.
 ```
 
 ## Template CSS (templates.html_template — is_default=true)
 
 ```css
-.cr-document {
+body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   color: #374151;
   max-width: 760px;
@@ -28,77 +69,55 @@ RÈGLES NON NÉGOCIABLES :
   line-height: 1.75;
   background: #ffffff;
 }
-.cr-logo {
+h1 {
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 6px;
   color: #1e3a5f;
-  margin: 0 0 4px 0;
-  line-height: 1;
-}
-.cr-subtitle {
-  color: #6b7280;
-  font-size: 13px;
-  margin: 0 0 16px 0;
-  font-weight: 400;
-}
-.cr-divider {
-  border: none;
-  border-top: 1px solid #e5e7eb;
-  margin: 0 0 20px 0;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
 }
 .cr-meta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 5px 14px;
-  margin-bottom: 32px;
+  color: #6b7280;
+  font-size: 13px;
+  margin: 0 0 32px 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
 }
-.cr-meta dt { font-weight: 600; color: #111827; white-space: nowrap; }
-.cr-meta dt::after { content: " :"; }
-.cr-meta dd { margin: 0; color: #374151; }
-.cr-section { margin-bottom: 8px; }
-.cr-section-title {
+h2 {
   color: #1e3a5f;
   font-size: 18px;
   font-weight: 700;
-  margin: 36px 0 0 0;
-  padding-bottom: 10px;
+  margin: 36px 0 12px 0;
+  padding-bottom: 8px;
   border-bottom: 1px solid #e5e7eb;
   line-height: 1.3;
 }
-.cr-section:first-of-type .cr-section-title { margin-top: 24px; }
-.cr-subsection { margin-top: 4px; }
-.cr-subsection-title {
-  color: #1d4ed8;
-  font-size: 14px;
-  font-weight: 600;
-  margin: 20px 0 6px 0;
-  line-height: 1.4;
-}
-.cr-body {
+p {
   margin: 10px 0;
-  text-align: justify;
-  hyphens: auto;
   color: #374151;
 }
-.cr-list {
+ul {
   margin: 10px 0 10px 22px;
   padding: 0;
   color: #374151;
 }
-.cr-list li { margin: 7px 0; padding-left: 4px; line-height: 1.65; }
+ul li {
+  margin: 7px 0;
+  padding-left: 4px;
+  line-height: 1.65;
+}
 .cr-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 14px;
-  font-size: 14px;
 }
 .cr-table td {
   padding: 11px 15px;
   vertical-align: top;
   border: 1px solid #000000;
-  line-height: 1.65;
   color: #000000;
+  line-height: 1.65;
 }
 .cr-table-label {
   font-weight: 600;
@@ -108,11 +127,6 @@ RÈGLES NON NÉGOCIABLES :
   vertical-align: middle;
   background-color: #ffffff;
 }
-.cr-table-content {
-  background-color: #ffffff;
-  color: #000000;
-  width: 72%;
-}
 .cr-footer {
   margin-top: 52px;
   padding-top: 16px;
@@ -121,109 +135,52 @@ RÈGLES NON NÉGOCIABLES :
   font-size: 12px;
   color: #9ca3af;
 }
-.cr-footer p { margin: 0; }
+.page-break {
+  break-before: page;
+  page-break-before: always;
+}
 ```
 
 ## FORMAT A4 — RÈGLES PAGINATION (frontend, 25/07/2026)
 
-Le front affiche les CR dans une iframe qui simule des feuilles A4 (210×297mm, marges 14mm H / 18mm V). Le HTML DOIT inclure :
+Le front affiche les CR dans un paginateur qui découpe le HTML en feuilles A4. Pour que ça marche, la structure doit être **plate** :
 
-### Wrapper racine
-```html
-<article class="cr-document" data-format="A4">
-```
+### Structure attendue
+- `<h1>` titre, `<p class="cr-meta">` meta, puis des `<h2>`, `<p>`, `<ul>`, `<table>` comme frères directs
+- PAS de wrapper unique englobant tout le CR (`<article>`, `<section>`, `<div class="cr-content">`)
+- Le paginateur coupe au niveau des blocs frères. Si tout est dans 1 seul bloc géant, il ne coupe pas.
 
-### Sauts de page explicites entre sections
-Entre chaque section principale (Objectif, Ordre du jour, Points abordés, Prochaines étapes) :
-```html
-<div class="page-break" style="break-before: page; page-break-before: always;"></div>
-```
-
-### Blocs insécables (avoid-break)
-Sur chaque sous-section, item d'action, tableau, blockquote :
-```html
-<section class="avoid-break" style="break-inside: avoid; page-break-inside: avoid;">…</section>
-```
+### Limite par bloc
+- Aucun `<p>`, `<ul>` ou `<table>` ne doit dépasser ~900px de haut (≈ hauteur A4)
+- Si un sujet est long, découper en plusieurs `<p>` consécutifs
 
 ### Titres jamais orphelins
 ```html
-<h2 class="cr-section-title" style="break-after: avoid; page-break-after: avoid;">…</h2>
+<h2 style="break-after: avoid; page-break-after: avoid;">Titre</h2>
 ```
 
-### PAS de text-align: justify
-Utiliser text-align: left par défaut. Le front gère la typo.
+### Tableaux insécables
+```html
+<table class="cr-table" style="break-inside: avoid; page-break-inside: avoid;">
+```
 
-### Longueur cible par page
-~2800 caractères par page. Chaque section principale doit tenir sur 1 page ou insérer un .page-break avant de déborder.
+### Sauts de page explicites (optionnels)
+```html
+<div class="page-break"></div>
+```
+
+### PAS de text-align: justify ni word-break: break-all
 
 ### Format titre recording
 `[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]`
 Exemple : `Veron Diet — Consultation client — Refonte site web et automatisation IA — 24/07/2026`
 
-## Structure HTML générée
-
-```html
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>/* CSS template ci-dessus */</style>
-</head>
-<body>
-<article class="cr-document">
-  <header>
-    <p class="cr-logo">H É R O N E</p>
-    <p class="cr-subtitle">Sujet de la réunion</p>
-    <hr class="cr-divider">
-    <dl class="cr-meta">
-      <dt>Date</dt><dd>...</dd>
-      <dt>Durée</dt><dd>...</dd>
-      <dt>Participants</dt><dd>...</dd>
-      <dt>Nature</dt><dd>...</dd>
-    </dl>
-  </header>
-
-  <!-- Sections H2 thématiques -->
-  <section class="cr-section">
-    <h2 class="cr-section-title">Titre thématique</h2>
-    <div class="cr-body">...</div>
-    <div class="cr-subsection">
-      <h3 class="cr-subsection-title">Sous-titre</h3>
-      <div class="cr-body">...</div>
-    </div>
-  </section>
-
-  <!-- Tableau final obligatoire (sans fond, juste bordures noires) -->
-  <table class="cr-table">
-    <tr>
-      <td class="cr-table-label">Décisions</td>
-      <td class="cr-table-content">...</td>
-    </tr>
-    <tr>
-      <td class="cr-table-label">Actions</td>
-      <td class="cr-table-content">...</td>
-    </tr>
-    <tr>
-      <td class="cr-table-label">Prochaine étape</td>
-      <td class="cr-table-content">...</td>
-    </tr>
-  </table>
-
-  <footer class="cr-footer">
-    <p>Document généré par Plaudia — Hérone</p>
-  </footer>
-</article>
-</body>
-</html>
-```
-
-## Style guide actuel (cr_style_guide, 14/07/2026)
+## Style guide actuel (cr_style_guide, 28/07/2026)
 
 | Instruction | Catégorie | Appliqué |
 |---|---|---|
-| Éviter le texte en gris sur fond bleu pour les titres comme « Prochaine étape » ; utiliser un contraste lisible. | style | 1× |
-| Dans le tableau final, n'utiliser que la couleur bleue et supprimer toute couleur orange. | style | 1× |
+| Le tableau final ne doit avoir AUCUNE couleur de fond — juste bordures noires et texte noir, sur fond blanc. Pas de cr-label-blue, pas de cr-label-orange. | style | 1× |
+| Footer simplifié : pas de logo HÉRONE, juste le texte "Document généré par Plaudia — Hérone". | style | 1× |
 
 ## Glossaire actuel (glossary, 14/07/2026)
 
@@ -240,14 +197,8 @@ Exemple : `Veron Diet — Consultation client — Refonte site web et automatisa
 ### 1. knowledge_base schema mismatch
 Le pipeline (étape i) tente d'insérer dans `knowledge_base (enterprise_id, project_id, recording_id, key, value, source, owner_id)`. **La table réelle n'a que** `id, category, value, notes, created_at, updated_at`. L'étape échoue systématiquement. À corriger : soit ajouter les colonnes manquantes, soit modifier la consigne du pipeline.
 
-### 2. 3 enregistrements incohérents (status='transcribed' sans transcription)
-3 lignes dans `recordings` ont `status='transcribed'` mais `raw_transcript IS NULL` et `transcript_segments IS NULL`. Le watchdog a avancé le statut sans écrire le contenu. À corriger : soit repasser en `pending` pour re-tenter, soit mettre en `error`.
-
-### 3. 18 chunks transcription_full sans embedding
-Les chunks de type `transcription_full` dans `rag_chunks` n'ont pas d'embedding vectoriel (colonne `embedding` NULL). Ces chunks sont invisibles au RAG.
-
-### 4. DeepSeek V4 Flash omet les balises <CR>
-Le modèle ne met pas toujours les balises `<CR>...</CR>` autour du HTML. Backend a fallback : DOCTYPE regex → `<article class="cr-document">` regex. Risque d'échec si le modèle répond en français sans HTML.
+### 2. DeepSeek V4 Flash produit parfois une structure avec sections au lieu de plate
+Le modèle a tendance à générer `<article>` ou `<section>` par habitude. Les instructions "structure plate" sont renforcées dans le prompt.
 
 ## Architecture du pipeline (2 tiers)
 
@@ -259,6 +210,8 @@ Plaud (app) -> Watchdog (5min, 0 LLM) -> INSERT recordings (status=transcribed) 
 - **Schedule** : `*/5 * * * *` (no_agent=true, script pur)
 - **Actions** : list_files -> get_file -> get_transcript -> INSERT recordings
 - **Déclenche** : `hermes cron run d4777fc4327a` quand nouveaux fichiers trouvés
+- **Phase B retry** : réessaie get_transcript pour les fichiers avec raw_transcript=NULL
+- **Détection entreprise** : titre uniquement (pas le transcript)
 
 ### Pipeline CR (plaudia-pipeline-principal)
 - **Schedule** : `0 12 * * *` (modèle: deepseek/deepseek-v4-flash)
@@ -268,7 +221,7 @@ Plaud (app) -> Watchdog (5min, 0 LLM) -> INSERT recordings (status=transcribed) 
 - **Étape 2c** : Applique glossaire sur raw_transcript
 - **Étape 2d** : Lit templates.prompt_instructions (is_default=true)
 - **Étape 2e** : Lit cr_style_guide (ORDER BY applied_count DESC)
-- **Étape 2f** : Génère CR HTML complet avec DeepSeek
+- **Étape 2f** : Génère CR HTML complet avec DeepSeek (structure plate)
 - **Étape 2g** : INSERT crs (recording_id, owner_id, content=HTML, version=1, status='ready')
 - **Étape 2h** : UPDATE recordings SET status='ready', title='[Entr] - [Type] - [Sujet] - [JJ/MM/AAAA]'
 - **Étape 2i** : Extract infos cles -> knowledge_base (BUG: schema mismatch)
@@ -277,9 +230,5 @@ Plaud (app) -> Watchdog (5min, 0 LLM) -> INSERT recordings (status=transcribed) 
 
 ### Edition CR (via chat frontend)
 - Format : `<CR>{html}</CR>\n\nInstruction : {msg}`
-- Detection style vs contenu par regex mots-cles
-- Mode contenu : preserve `<style>`, recoit transcription originale
-- Mode style : peut modifier `<style>`, pas de transcription
-- Extraction : <CR> -> DOCTYPE -> <article class="cr-document">
 - Backup dans cr_versions avant PATCH
 - Apprentissage : learn_from_cr_edit() -> cr_style_guide
