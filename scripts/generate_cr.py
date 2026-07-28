@@ -271,6 +271,64 @@ def update_recording_status(recording_id, title=None):
     )
 
 
+def postprocess_html(html):
+    """Fix common issues: missing French accents, wrong footer."""
+    # Fix missing accents (DeepSeek V4 Flash tends to drop them)
+    replacements = {
+        "Dcision": "Décision",
+        "Dcisions": "Décisions",
+        "intrt": "intérêt",
+        "interet": "intérêt",
+        "rdaction": "rédaction",
+        "redaction": "rédaction",
+        "Prparer": "Préparer",
+        "Preparer": "Préparer",
+        "concrte": "concrète",
+        "concrete": "concrète",
+        "pirmtre": "périmètre",
+        "perimetre": "périmètre",
+        "etape": "étape",
+        "ecrit": "écrit",
+        "general": "général",
+        "probleme": "problème",
+        "problemes": "problèmes",
+        "tache": "tâche",
+        "taches": "tâches",
+        "garantie": "garantie",
+        "demarche": "démarche",
+        "demarches": "démarches",
+        "concretes": "concrètes",
+        "concrets": "concrets",
+        "complet": "complet",
+        "complete": "complète",
+        "specifique": "spécifique",
+        "specifiques": "spécifiques",
+        "memoire": "mémoire",
+        "memoriser": "mémoriser",
+        "tresorerie": "trésorerie",
+        "differents": "différents",
+        "differentes": "différentes",
+        "exemple": "exemple",
+        "exemples": "exemples",
+        "interet": "intérêt",
+        "interets": "intérêts",
+        "connaitre": "connaître",
+        "maitriser": "maîtriser",
+        "maitrise": "maîtrise",
+        "cout": "coût",
+        "couts": "coûts",
+        "retour": "retour",
+        "retours": "retours",
+        "moyen": "moyen",
+        "moyens": "moyens",
+        "fonction": "fonction",
+        "fonctions": "fonctions",
+    }
+    for wrong, correct in replacements.items():
+        html = html.replace(wrong, correct)
+    return html
+
+
 def process_recording(recording_id, dry_run=False):
     """Full pipeline for one recording: fetch transcript, generate CR, insert."""
     print(f"\\n{'='*60}")
@@ -305,8 +363,12 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut faire 10 000 mots ou plus.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement.
-- Structure HTML plate : <h1>H É R O N E</h1> > <p class="cr-subtitle"> (1 ligne) > <p class="cr-meta"> (infos avec <br>) > <hr class="cr-divider"> > <div style=break-inside:avoid> <h2 style=break-after:avoid;page-break-after:avoid> <p> <ul> </div> (un div par section, PAS de section/article/cr-body) > <table class=cr-table style=break-inside:avoid> > <p class=cr-footer>.
+- Structure HTML plate : <h1>H É R O N E</h1> > <p class="cr-subtitle"> > <p class="cr-meta"> (infos avec <br>) > <hr class="cr-divider"> > <div style=break-inside:avoid><h2 style=break-after:avoid;page-break-after:avoid><p><ul></div> (un div par section, PAS de section/article/cr-body) > <table class=cr-table style=break-inside:avoid> > <p class=cr-footer>.
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
+- Footer : "Compte rendu généré par Hérone" (pas "Document généré par Plaudia").
+- Les accents français DOIVENT être corrects (é, à, è, ê, î, ô, û, ç, etc.). Vérifie chaque mot y compris dans le tableau final.
+- Le prénom et le nom des participants doivent être complets (ex: "Yohan Richard" pas juste "Richard").
+- L'adresse email du client (si donnée dans la transcription) doit figurer dans le bloc meta avec "Contact :".
 
 CONTEXTE :
 - Client : {client_name or "Non spécifié"}
@@ -325,7 +387,7 @@ CONTEXTE :
         return True
 
     # Insert CR
-    insert_cr(recording_id, full_html, enterprise_id, project_id)
+    insert_cr(recording_id, postprocess_html(full_html), enterprise_id, project_id)
     print(f"  CR inserted into crs")
 
     # Update recording

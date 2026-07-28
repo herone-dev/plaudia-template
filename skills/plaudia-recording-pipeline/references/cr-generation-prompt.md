@@ -23,9 +23,10 @@ STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
   <!-- Meta avec sauts de ligne (<br>) entre chaque info -->
   <p class="cr-meta">
     Client : AQCF (Audit, Qualité, Conseil, Formation)<br>
+    Contact : Yohan Richard — yoann.richard@aqcf.com<br>
     Date : 28/07/2026<br>
     Durée : 84 min<br>
-    Participants : Yohann Richard (AQCF), Speaker 1, Speaker 3 (Hérone)<br>
+    Participants : Yohan Richard (AQCF), Speaker 1 (Hérone)<br>
     Nature : Premier rendez-vous d'audit
   </p>
 
@@ -64,7 +65,7 @@ STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
   </table>
 
   <!-- Footer -->
-  <p class="cr-footer">Document généré par Plaudia — Hérone</p>
+  <p class="cr-footer">Compte rendu généré par Hérone</p>
 </body>
 
 RÈGLES DE STRUCTURE :
@@ -82,7 +83,10 @@ RÈGLES DE STRUCTURE :
 - Retourne UNIQUEMENT le HTML à partir de <body>, sans commentaire avant/après.
 - Le CSS est fourni dans le <head> par le système — ne pas inclure de <style>.
 - Tableau final : fond blanc, bordures noires, texte noir. Pas de couleur de fond.
-- Footer : juste le texte "Document généré par Plaudia — Hérone", pas de logo HÉRONE.
+- Footer : "Compte rendu généré par Hérone" (pas "Document généré par Plaudia").
+- Les accents français DOIVENT être corrects (é, à, è, ê, î, ô, û, ç, etc.). Vérifie chaque mot.
+- Le prénom et le nom des participants doivent être complets (ex: "Yohan Richard" pas juste "Richard").
+- L'adresse email du client (si donnée dans la transcription) doit figurer dans le bloc meta avec "Contact :".
 ```
 
 ## Template CSS (templates.html_template — is_default=true)
