@@ -217,10 +217,9 @@ def build_cr_html(recording, llm_html):
 .cr-list { margin: 10px 0 10px 22px; padding: 0; color: #374151; }
 .cr-list li { margin: 7px 0; padding-left: 4px; }
 .cr-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-.cr-table td { padding: 11px 15px; vertical-align: top; border: 1px solid #e5e7eb; }
-.cr-table-label { font-weight: 600; color: #fff; width: 28%; font-size: 13px; vertical-align: middle; }
-.cr-label-blue { background-color: #1e3a5f; }
-.cr-table-content { background-color: #fff; color: #374151; width: 72%; }
+.cr-table td { padding: 11px 15px; vertical-align: top; border: 1px solid #000000; color: #000000; }
+.cr-table-label { font-weight: 600; color: #000000; width: 28%; font-size: 13px; vertical-align: middle; background-color: #ffffff; }
+.cr-table-content { background-color: #fff; color: #000000; width: 72%; }
 .cr-footer { margin-top: 52px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; }
 .cr-footer p { margin: 0; }
 """
@@ -317,7 +316,7 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut faire 10 000 mots ou plus.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement.
-- Structure HTML : <article class="cr-document" data-format="A4"> avec header <p class="cr-logo">H É R O N E</p> + <dl class="cr-meta"> (dt/dd) > sections (cr-section, cr-section-title, cr-body, cr-subsection avec avoid-break) > tableau final obligatoire (cr-table, cr-label-blue) > footer.
+- Structure HTML : <article class="cr-document" data-format="A4"> avec header <p class="cr-logo">H É R O N E</p> + <dl class="cr-meta"> (dt/dd) > sections (cr-section, cr-section-title, cr-body, cr-subsection avec avoid-break) > tableau final obligatoire (cr-table, cr-table-label, pas de couleur de fond, bordures noires) > footer (cr-footer : uniquement "Document généré par Plaudia — Hérone", pas de répétition du logo).
 - Utilise <div class="page-break"> entre les sections principales et <section class="avoid-break"> sur les blocs insécables.
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
 

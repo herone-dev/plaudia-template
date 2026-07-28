@@ -11,7 +11,7 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Aucune limite basse non plus (supprimer le "500 à 1500 mots"). Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut être aussi long.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement. Ne jamais corriger un nom propre par déduction si le glossaire ne le mentionne pas — signaler l'incertitude plutôt que d'inventer.
-- Structure HTML : cr-document > header (cr-logo, cr-subtitle, cr-divider, cr-meta) > sections (cr-section, cr-section-title, cr-body, cr-subsection) > tableau final obligatoire (cr-table, cr-label-blue uniquement) > footer (cr-footer).
+- Structure HTML : cr-document > header (cr-logo, cr-subtitle, cr-divider, cr-meta) > sections (cr-section, cr-section-title, cr-body, cr-subsection) > tableau final obligatoire (cr-table, cr-table-label, pas de couleur de fond) > footer (cr-footer : uniquement "Document généré par Plaudia — Hérone", pas de logo HÉRONE répété dans le footer).
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
 ```
 
@@ -96,21 +96,21 @@ RÈGLES NON NÉGOCIABLES :
 .cr-table td {
   padding: 11px 15px;
   vertical-align: top;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #000000;
   line-height: 1.65;
+  color: #000000;
 }
 .cr-table-label {
   font-weight: 600;
-  color: #ffffff;
+  color: #000000;
   width: 28%;
   font-size: 13px;
   vertical-align: middle;
+  background-color: #ffffff;
 }
-.cr-label-orange { background-color: #d97706; }
-.cr-label-blue   { background-color: #1e3a5f; }
 .cr-table-content {
   background-color: #ffffff;
-  color: #374151;
+  color: #000000;
   width: 72%;
 }
 .cr-footer {
@@ -194,18 +194,18 @@ Exemple : `Veron Diet — Consultation client — Refonte site web et automatisa
     </div>
   </section>
 
-  <!-- Tableau final obligatoire -->
+  <!-- Tableau final obligatoire (sans fond, juste bordures noires) -->
   <table class="cr-table">
     <tr>
-      <td class="cr-table-label cr-label-blue">Décisions</td>
+      <td class="cr-table-label">Décisions</td>
       <td class="cr-table-content">...</td>
     </tr>
     <tr>
-      <td class="cr-table-label cr-label-blue">Actions</td>
+      <td class="cr-table-label">Actions</td>
       <td class="cr-table-content">...</td>
     </tr>
     <tr>
-      <td class="cr-table-label cr-label-orange">Prochaine étape</td>
+      <td class="cr-table-label">Prochaine étape</td>
       <td class="cr-table-content">...</td>
     </tr>
   </table>
