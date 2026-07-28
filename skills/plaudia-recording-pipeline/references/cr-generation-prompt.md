@@ -14,29 +14,49 @@ RÈGLES NON NÉGOCIABLES :
 
 STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
 <body>
-  <!-- En-tête -->
-  <h1>Titre du CR — Client — Date</h1>
-  <p class="cr-meta">Client · Date · Durée · Participants · Nature</p>
+  <!-- EN-TÊTE : logo HÉRONE en H1 -->
+  <h1>H É R O N E</h1>
+
+  <!-- Sous-titre : Client — Type — Sujet — Date -->
+  <p class="cr-subtitle">AQCF — Audit — Premier rendez-vous d'audit et présentation AQCF — 28/07/2026</p>
+
+  <!-- Meta avec sauts de ligne (<br>) entre chaque info -->
+  <p class="cr-meta">
+    Client : AQCF (Audit, Qualité, Conseil, Formation)<br>
+    Date : 28/07/2026<br>
+    Durée : 84 min<br>
+    Participants : Yohann Richard (AQCF), Speaker 1, Speaker 3 (Hérone)<br>
+    Nature : Premier rendez-vous d'audit
+  </p>
+
+  <hr class="cr-divider">
 
   <!-- Sections : chaque H2 + ses contenus sont des frères directs -->
-  <h2>Titre thématique</h2>
-  <p>…</p>
-  <p>…</p>
+  <h2 style="break-after:avoid;">Présentation de l'activité</h2>
+  <p>...</p>
+  <p>...</p>
 
-  <h2>Titre suivant</h2>
-  <p>…</p>
+  <h2 style="break-after:avoid;">Deuxième section</h2>
+  <p>...</p>
   <ul>
-    <li>…</li>
-    <li>…</li>
+    <li>...</li>
+    <li>...</li>
   </ul>
 
-  ...
-
-  <!-- Tableau final : décisions, actions, prochaines étapes -->
+  <!-- Tableau final : Décisions, Actions, Prochaine étape -->
   <table class="cr-table">
-    <tr><td class="cr-table-label">Décisions</td><td>…</td></tr>
-    <tr><td class="cr-table-label">Actions</td><td>…</td></tr>
-    <tr><td class="cr-table-label">Prochaine étape</td><td>…</td></tr>
+    <tr>
+      <td class="cr-table-label">Décisions</td>
+      <td>…</td>
+    </tr>
+    <tr>
+      <td class="cr-table-label">Actions</td>
+      <td>…</td>
+    </tr>
+    <tr>
+      <td class="cr-table-label">Prochaine étape</td>
+      <td>…</td>
+    </tr>
   </table>
 
   <!-- Footer -->
@@ -44,11 +64,14 @@ STRUCTURE HTML OBLIGATOIRE (plate, PAS de sections imbriquées) :
 </body>
 
 RÈGLES DE STRUCTURE :
-- PAS de <section>, PAS de <article>, PAS de <div class="cr-section">, PAS de <div class="cr-body">. Les <h2>, <p>, <ul>, <table> sont des FRÈRES DIRECTS dans le <body>.
-- Chaque H2 doit porter style="break-after: avoid; page-break-after: avoid;" en inline.
-- Chaque tableau doit porter style="break-inside: avoid; page-break-inside: avoid;" en inline.
+- PAS de <section>, PAS de <article>, PAS de <div class="cr-section">, PAS de <div class="cr-body">. Les h1, p.cr-subtitle, p.cr-meta, hr, h2, p, ul, table sont des FRÈRES DIRECTS dans le <body>.
+- Le H1 doit être EXACTEMENT "H É R O N E" (avec espaces entre les lettres) — c'est le logo. Jamais autre chose dans le H1.
+- Le p.cr-subtitle contient la description de la réunion sur UNE SEULE LIGNE (pas de <br>).
+- Le p.cr-meta contient les infos avec des <br> entre chaque ligne. Jamais tout sur une même ligne.
+- Chaque H2 doit porter style="break-after:avoid;" en inline.
+- Chaque tableau doit porter style="break-inside:avoid;" en inline.
 - Aucun bloc ne doit dépasser ~900px de haut. Si un sujet est long, découper en plusieurs <p>.
-- <div class="page-break" style="break-before: page; page-break-before: always;"></div> entre les grandes sections si besoin.
+- <div class="page-break"></div> entre les grandes sections si besoin (le CSS gère le break-before).
 - PAS de text-align: justify. PAS de word-break: break-all.
 - Retourne UNIQUEMENT le HTML à partir de <body>, sans commentaire avant/après.
 - Le CSS est fourni dans le <head> par le système — ne pas inclure de <style>.
@@ -74,15 +97,25 @@ h1 {
   font-weight: 800;
   letter-spacing: 6px;
   color: #1e3a5f;
-  margin: 0 0 8px 0;
-  line-height: 1.2;
+  margin: 0 0 4px 0;
+  line-height: 1;
 }
-.cr-meta {
+.cr-subtitle {
   color: #6b7280;
   font-size: 13px;
-  margin: 0 0 32px 0;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  margin: 0 0 20px 0;
+  font-weight: 400;
+}
+.cr-meta {
+  color: #374151;
+  font-size: 13px;
+  margin: 0 0 28px 0;
+  line-height: 1.8;
+}
+.cr-divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0 0 24px 0;
 }
 h2 {
   color: #1e3a5f;
@@ -110,26 +143,26 @@ ul li {
 .cr-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 14px;
+  margin-top: 12px;
 }
-.cr-table td {
-  padding: 11px 15px;
+.cr-table td, .cr-table th {
+  padding: 10px 14px;
   vertical-align: top;
   border: 1px solid #000000;
   color: #000000;
-  line-height: 1.65;
+  line-height: 1.6;
 }
 .cr-table-label {
   font-weight: 600;
   color: #000000;
-  width: 28%;
+  width: 26%;
   font-size: 13px;
   vertical-align: middle;
   background-color: #ffffff;
 }
 .cr-footer {
-  margin-top: 52px;
-  padding-top: 16px;
+  margin-top: 48px;
+  padding-top: 14px;
   border-top: 1px solid #e5e7eb;
   text-align: center;
   font-size: 12px;
@@ -146,41 +179,22 @@ ul li {
 Le front affiche les CR dans un paginateur qui découpe le HTML en feuilles A4. Pour que ça marche, la structure doit être **plate** :
 
 ### Structure attendue
-- `<h1>` titre, `<p class="cr-meta">` meta, puis des `<h2>`, `<p>`, `<ul>`, `<table>` comme frères directs
-- PAS de wrapper unique englobant tout le CR (`<article>`, `<section>`, `<div class="cr-content">`)
-- Le paginateur coupe au niveau des blocs frères. Si tout est dans 1 seul bloc géant, il ne coupe pas.
+- `<h1>H É R O N E</h1>` — logo en H1
+- `<p class="cr-subtitle">` — description réunion sur une ligne
+- `<p class="cr-meta">` — infos avec `<br>` entre chaque ligne
+- `<hr class="cr-divider">` — séparateur
+- `<h2 style="break-after:avoid;">`, `<p>`, `<ul>`, `<table>` comme frères directs
 
-### Limite par bloc
-- Aucun `<p>`, `<ul>` ou `<table>` ne doit dépasser ~900px de haut (≈ hauteur A4)
-- Si un sujet est long, découper en plusieurs `<p>` consécutifs
-
-### Titres jamais orphelins
-```html
-<h2 style="break-after: avoid; page-break-after: avoid;">Titre</h2>
-```
-
-### Tableaux insécables
-```html
-<table class="cr-table" style="break-inside: avoid; page-break-inside: avoid;">
-```
-
-### Sauts de page explicites (optionnels)
-```html
-<div class="page-break"></div>
-```
-
-### PAS de text-align: justify ni word-break: break-all
+### Règles
+- Aucun `<p>`, `<ul>` ou `<table>` ne doit dépasser ~900px de haut
+- Titres H2 avec `break-after:avoid` inline
+- Tableaux avec `break-inside:avoid` inline
+- Sauts explicites : `<div class="page-break"></div>`
+- PAS de `text-align: justify` ni `word-break: break-all`
 
 ### Format titre recording
 `[Entreprise] — [Type] — [Sujet] — [JJ/MM/AAAA]`
 Exemple : `Veron Diet — Consultation client — Refonte site web et automatisation IA — 24/07/2026`
-
-## Style guide actuel (cr_style_guide, 28/07/2026)
-
-| Instruction | Catégorie | Appliqué |
-|---|---|---|
-| Le tableau final ne doit avoir AUCUNE couleur de fond — juste bordures noires et texte noir, sur fond blanc. Pas de cr-label-blue, pas de cr-label-orange. | style | 1× |
-| Footer simplifié : pas de logo HÉRONE, juste le texte "Document généré par Plaudia — Hérone". | style | 1× |
 
 ## Glossaire actuel (glossary, 14/07/2026)
 
@@ -191,44 +205,3 @@ Exemple : `Veron Diet — Consultation client — Refonte site web et automatisa
 | Ati | Hati | partagé |
 | Xombo | Lixogo | partagé |
 | Ouigo | Ewigo | partagé |
-
-## Bugs connus
-
-### 1. knowledge_base schema mismatch
-Le pipeline (étape i) tente d'insérer dans `knowledge_base (enterprise_id, project_id, recording_id, key, value, source, owner_id)`. **La table réelle n'a que** `id, category, value, notes, created_at, updated_at`. L'étape échoue systématiquement. À corriger : soit ajouter les colonnes manquantes, soit modifier la consigne du pipeline.
-
-### 2. DeepSeek V4 Flash produit parfois une structure avec sections au lieu de plate
-Le modèle a tendance à générer `<article>` ou `<section>` par habitude. Les instructions "structure plate" sont renforcées dans le prompt.
-
-## Architecture du pipeline (2 tiers)
-
-```
-Plaud (app) -> Watchdog (5min, 0 LLM) -> INSERT recordings (status=transcribed) -> Pipeline CR (12h/jour, DeepSeek V4 Flash)
-```
-
-### Watchdog (plaudia_watchdog.py)
-- **Schedule** : `*/5 * * * *` (no_agent=true, script pur)
-- **Actions** : list_files -> get_file -> get_transcript -> INSERT recordings
-- **Déclenche** : `hermes cron run d4777fc4327a` quand nouveaux fichiers trouvés
-- **Phase B retry** : réessaie get_transcript pour les fichiers avec raw_transcript=NULL
-- **Détection entreprise** : titre uniquement (pas le transcript)
-
-### Pipeline CR (plaudia-pipeline-principal)
-- **Schedule** : `0 12 * * *` (modèle: deepseek/deepseek-v4-flash)
-- **Étape 1** : SELECT recordings WHERE status='transcribed' LIMIT 5
-- **Étape 2a** : Cherche/crée entreprise (enterprises.name ILIKE client_name)
-- **Étape 2b** : Projet si >=2 réunions même sujet (projects.name ILIKE '%sujet%')
-- **Étape 2c** : Applique glossaire sur raw_transcript
-- **Étape 2d** : Lit templates.prompt_instructions (is_default=true)
-- **Étape 2e** : Lit cr_style_guide (ORDER BY applied_count DESC)
-- **Étape 2f** : Génère CR HTML complet avec DeepSeek (structure plate)
-- **Étape 2g** : INSERT crs (recording_id, owner_id, content=HTML, version=1, status='ready')
-- **Étape 2h** : UPDATE recordings SET status='ready', title='[Entr] - [Type] - [Sujet] - [JJ/MM/AAAA]'
-- **Étape 2i** : Extract infos cles -> knowledge_base (BUG: schema mismatch)
-- **Étape 3** : Rapport resume
-- **Silent** : Si aucun enregistrement en attente -> repondre "[SILENT]"
-
-### Edition CR (via chat frontend)
-- Format : `<CR>{html}</CR>\n\nInstruction : {msg}`
-- Backup dans cr_versions avant PATCH
-- Apprentissage : learn_from_cr_edit() -> cr_style_guide

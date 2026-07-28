@@ -199,16 +199,18 @@ def build_cr_html(recording, llm_html):
   line-height: 1.75;
   background: #ffffff;
 }
-h1 { font-size: 26px; font-weight: 800; letter-spacing: 6px; color: #1e3a5f; margin: 0 0 8px 0; line-height: 1.2; }
-.cr-meta { color: #6b7280; font-size: 13px; margin: 0 0 32px 0; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+h1 { font-size: 26px; font-weight: 800; letter-spacing: 6px; color: #1e3a5f; margin: 0 0 4px 0; line-height: 1; }
+.cr-subtitle { color: #6b7280; font-size: 13px; margin: 0 0 20px 0; font-weight: 400; }
+.cr-meta { color: #374151; font-size: 13px; margin: 0 0 28px 0; line-height: 1.8; }
+.cr-divider { border: none; border-top: 1px solid #e5e7eb; margin: 0 0 24px 0; }
 h2 { color: #1e3a5f; font-size: 18px; font-weight: 700; margin: 36px 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; line-height: 1.3; }
 p { margin: 10px 0; color: #374151; }
 ul { margin: 10px 0 10px 22px; padding: 0; color: #374151; }
 ul li { margin: 7px 0; padding-left: 4px; line-height: 1.65; }
-.cr-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-.cr-table td { padding: 11px 15px; vertical-align: top; border: 1px solid #000000; color: #000000; line-height: 1.65; }
-.cr-table-label { font-weight: 600; color: #000000; width: 28%; font-size: 13px; vertical-align: middle; background-color: #ffffff; }
-.cr-footer { margin-top: 52px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; }
+.cr-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.cr-table td, .cr-table th { padding: 10px 14px; vertical-align: top; border: 1px solid #000000; color: #000000; line-height: 1.6; }
+.cr-table-label { font-weight: 600; color: #000000; width: 26%; font-size: 13px; vertical-align: middle; background-color: #ffffff; }
+.cr-footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; }
 .page-break { break-before: page; page-break-before: always; }"""
     # Strip DOCTYPE/html/head/body if the model included them
     for tag in ["<!DOCTYPE html>", "<html", "</html>", "<head>", "</head>", "<body>", "</body>"]:
@@ -303,7 +305,7 @@ RÈGLES NON NÉGOCIABLES :
 - AUCUNE LIMITE DE LONGUEUR. Le CR doit refléter la réunion dans son intégralité — chaque sous-sujet, chaque donnée chiffrée, chaque nom cité, chaque décision, chaque objection, chaque question en suspens. Si la transcription fait 80 000 caractères, le CR peut faire 10 000 mots ou plus.
 - Titres H2 thématiques et spécifiques, jamais génériques ("Discussion", "Points évoqués").
 - Glossaire appliqué avant tout traitement.
-- Structure HTML plate (PAS de sections imbriquees) : <h1>Titre</h1> + <p class="cr-meta"> meta > <h2> sections thematiques > <p>, <ul>, <table> comme freres directs dans <body>. Jamais de <section>, <article>, <div class="cr-section"> ou <div class="cr-body">. Chaque h2 inline: style=break-after:avoid. Chaque <table> inline: style=break-inside:avoid. <div class="page-break"> entre grandes sections. Tableau final (cr-table, cr-table-label, pas de fond, bordures noires). Footer: <p class="cr-footer">Document genere par Plaudia — Herone</p>.
+- Structure HTML plate (PAS de sections imbriquees) : <h1>H É R O N E</h1> > <p class="cr-subtitle"> (1 ligne) > <p class="cr-meta"> (infos avec <br>) > <hr class="cr-divider"> > <h2 style=break-after:avoid> > <p> > <ul> > <table class=cr-table style=break-inside:avoid> > <p class=cr-footer>. Les h1/h2/p/ul/table sont freres directs dans body. PAS de <section>/<article>/cr-body.
 - Retourne UNIQUEMENT le HTML, sans commentaire avant/après.
 
 CONTEXTE :
